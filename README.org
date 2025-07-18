@@ -1,0 +1,167 @@
+#+TITLE: Gemini REPL 006: AI-Assisted Literate Programming Exercise
+#+AUTHOR: AYGP-DR
+#+DATE: 2025-07-18
+
+* Overview
+
+This repository contains a *literate programming exercise* designed for students learning to work with AI assistants (like Claude, ChatGPT, or Gemini) in software development workflows.
+
+The repository does *NOT* contain a working REPL - instead, it provides a comprehensive specification in the form of a literate org-mode document that an AI assistant can use to generate a complete, working implementation.
+
+* Learning Objectives
+
+Students who complete this exercise will learn:
+
+1. **Literate Programming**: How to work with org-mode documents that combine code and documentation
+2. **AI-Assisted Development**: How to guide AI assistants to generate working code from specifications
+3. **Functional Programming**: Clojure/Babashka idioms and patterns
+4. **System Architecture**: Building a non-trivial application with multiple components
+5. **Tool Integration**: Working with external APIs, file systems, and command-line interfaces
+
+* What's in This Repository
+
+This repository contains exactly two files:
+
+1. =README.org= (this file) - Instructions for students
+2. =CLOJURE-GEMINI-REPL.org= - A complete literate programming specification
+
+The =CLOJURE-GEMINI-REPL.org= file contains:
+- Detailed system architecture
+- All source code (embedded in org-mode blocks)
+- Configuration files
+- Build scripts
+- Test suites
+- Documentation
+- AI assistant guidance
+
+* Getting Started
+
+** Prerequisites
+
+- An AI assistant (Claude, ChatGPT, Gemini, etc.)
+- Basic familiarity with command-line tools
+- Emacs with org-mode (for tangling) OR an AI that can extract code blocks
+- Babashka installed (for running the generated code)
+
+** Exercise Steps
+
+1. **Fork or Clone** this repository:
+   #+begin_src bash
+   git clone https://github.com/aygp-dr/gemini-repl-006.git
+   cd gemini-repl-006
+   #+end_src
+
+2. **Read** the =CLOJURE-GEMINI-REPL.org= file to understand the system design
+
+3. **Use your AI assistant** to:
+   - Extract (tangle) all the code from the org file
+   - Set up the project structure
+   - Configure the environment
+   - Run tests
+   - Start the REPL
+
+4. **Document** your process:
+   - What prompts worked well?
+   - What challenges did you encounter?
+   - How did you guide the AI to success?
+
+** Example AI Prompts
+
+Here are some prompts to get you started:
+
+#+begin_example
+"I have a literate programming document called CLOJURE-GEMINI-REPL.org that contains 
+embedded source code for a Clojure/Babashka project. Can you help me extract all the 
+code files and set up the project?"
+#+end_example
+
+#+begin_example
+"Please analyze the CLOJURE-GEMINI-REPL.org file and create a Makefile target that 
+will tangle all the source code files to their correct locations."
+#+end_example
+
+#+begin_example
+"The org file contains some documentation inconsistencies that were intentionally 
+left for educational purposes. Can you identify and fix them?"
+#+end_example
+
+* Learning Path
+
+** Beginner Level
+1. Successfully extract all files from the org document
+2. Get the basic REPL running
+3. Execute simple commands
+
+** Intermediate Level
+1. Fix any inconsistencies in the extracted code
+2. Add a new slash command to the REPL
+3. Implement a new tool function
+4. Write additional tests
+
+** Advanced Level
+1. Refactor the code to improve architecture
+2. Add new features (e.g., conversation branching)
+3. Implement alternative backends (e.g., OpenAI, Anthropic)
+4. Create your own literate programming document for a different project
+
+* Evaluation Criteria
+
+Your implementation will be evaluated on:
+
+1. **Successful Extraction**: Did you extract all files correctly?
+2. **Working Implementation**: Does the REPL run without errors?
+3. **Problem Solving**: How did you handle issues and inconsistencies?
+4. **AI Collaboration**: How effectively did you work with your AI assistant?
+5. **Documentation**: Did you document your process and learnings?
+
+* Tips for Success
+
+- Start by understanding the overall architecture before diving into details
+- Use the AI to explain parts you don't understand
+- Test incrementally - don't try to get everything working at once
+- The org file has intentional inconsistencies - fixing them is part of the exercise
+- Compare your extracted files with the expected structure described in the org file
+
+* Submission
+
+If this is part of a course:
+
+1. Create a new repository with your working implementation
+2. Include a =LEARNING-JOURNAL.org= documenting:
+   - Your process
+   - AI prompts that worked well
+   - Challenges and solutions
+   - Insights about AI-assisted development
+3. Submit a pull request with a link to your repository
+
+* Historical Context
+
+This is version 006 in the gemini-repl series:
+- Original: ClojureScript implementation
+- 001: Added formal methods (TLA+, Alloy)
+- 003: Enhanced tooling and CI/CD
+- 005: Python port with literate programming
+- 006: Clojure/Babashka with literate programming (this exercise)
+
+Each version explores different aspects of REPL design and implementation.
+
+* Resources
+
+- [[https://orgmode.org/][Org-mode Documentation]]
+- [[https://babashka.org/][Babashka Documentation]]
+- [[https://www.anthropic.com/claude][Claude AI Assistant]]
+- [[https://github.com/aygp-dr/gemini-repl-005][Previous Version (Python)]]
+
+* License
+
+This educational material is provided under the MIT License. See the CLOJURE-GEMINI-REPL.org file for details.
+
+* Support
+
+If you're stuck:
+1. Re-read the relevant section of the org file
+2. Ask your AI assistant to explain the architecture
+3. Check if your issue is mentioned in the "Common Issues" section of the org file
+4. Remember: the goal is to learn AI-assisted development, not just to get the code working
+
+Good luck with your literate programming journey! 🚀
