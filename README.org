@@ -2,12 +2,12 @@
 #+AUTHOR: AYGP-DR
 #+DATE: 2025-07-18
 
-[[https://img.shields.io/badge/FreeBSD-14.3--RELEASE-red?logo=freebsd]]
-[[https://img.shields.io/badge/Clojure-1.12.0-blue?logo=clojure]]
-[[https://img.shields.io/badge/Babashka-1.12.206-green?logo=clojure]]
-[[https://img.shields.io/badge/Org--mode-9.0+-purple?logo=gnu-emacs]]
-[[https://img.shields.io/badge/License-MIT-yellow]]
-[[https://img.shields.io/badge/Type-Educational-orange]]
+#+HTML: <img src="https://img.shields.io/badge/FreeBSD-14.3--RELEASE-red?logo=freebsd" alt="FreeBSD 14.3-RELEASE" />
+#+HTML: <img src="https://img.shields.io/badge/Clojure-1.12.0-blue?logo=clojure" alt="Clojure 1.12.0" />
+#+HTML: <img src="https://img.shields.io/badge/Babashka-1.12.206-green?logo=clojure" alt="Babashka 1.12.206" />
+#+HTML: <img src="https://img.shields.io/badge/Org--mode-9.0+-purple?logo=gnu-emacs" alt="Org-mode 9.0+" />
+#+HTML: <img src="https://img.shields.io/badge/License-MIT-yellow" alt="MIT License" />
+#+HTML: <img src="https://img.shields.io/badge/Type-Educational-orange" alt="Educational" />
 
 * Overview
 
@@ -49,7 +49,8 @@ The [[file:CLOJURE-GEMINI-REPL.org][CLOJURE-GEMINI-REPL.org]] file contains:
 - Basic familiarity with command-line tools
 - Emacs with org-mode (for tangling) OR an AI that can extract code blocks
 - Babashka installed (for running the generated code)
-  - FreeBSD users: Confirmed working on FreeBSD 14.3-RELEASE with `sudo bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)`
+  - FreeBSD users: Confirmed working on FreeBSD 14.3-RELEASE with ~sudo bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)~
+  - Docker users: See ~Dockerfile.student~ for a pre-configured environment
   - Other systems: Follow [[https://babashka.org/#installation][official installation guide]]
 
 ** Exercise Steps
