@@ -2,6 +2,13 @@
 #+AUTHOR: AYGP-DR
 #+DATE: 2025-07-18
 
+[[https://img.shields.io/badge/FreeBSD-14.3--RELEASE-red?logo=freebsd][https://img.shields.io/badge/FreeBSD-14.3--RELEASE-red?logo=freebsd]]
+[[https://img.shields.io/badge/Clojure-1.12.0-blue?logo=clojure][https://img.shields.io/badge/Clojure-1.12.0-blue?logo=clojure]]
+[[https://img.shields.io/badge/Babashka-1.3.0+-green?logo=clojure][https://img.shields.io/badge/Babashka-1.3.0+-green?logo=clojure]]
+[[https://img.shields.io/badge/Org--mode-9.0+-purple?logo=gnu-emacs][https://img.shields.io/badge/Org--mode-9.0+-purple?logo=gnu-emacs]]
+[[https://img.shields.io/badge/License-MIT-yellow][https://img.shields.io/badge/License-MIT-yellow]]
+[[https://img.shields.io/badge/Type-Educational-orange][https://img.shields.io/badge/Type-Educational-orange]]
+
 * Overview
 
 This repository contains a *literate programming exercise* designed for students learning to work with AI assistants (like Claude, ChatGPT, or Gemini) in software development workflows.
@@ -12,11 +19,11 @@ The repository does *NOT* contain a working REPL - instead, it provides a compre
 
 Students who complete this exercise will learn:
 
-1. **Literate Programming**: How to work with org-mode documents that combine code and documentation
-2. **AI-Assisted Development**: How to guide AI assistants to generate working code from specifications
-3. **Functional Programming**: Clojure/Babashka idioms and patterns
-4. **System Architecture**: Building a non-trivial application with multiple components
-5. **Tool Integration**: Working with external APIs, file systems, and command-line interfaces
+1. *Literate Programming*: How to work with org-mode documents that combine code and documentation
+2. *AI-Assisted Development*: How to guide AI assistants to generate working code from specifications
+3. *Functional Programming*: Clojure/Babashka idioms and patterns
+4. *System Architecture*: Building a non-trivial application with multiple components
+5. *Tool Integration*: Working with external APIs, file systems, and command-line interfaces
 
 * What's in This Repository
 
@@ -42,25 +49,27 @@ The =CLOJURE-GEMINI-REPL.org= file contains:
 - Basic familiarity with command-line tools
 - Emacs with org-mode (for tangling) OR an AI that can extract code blocks
 - Babashka installed (for running the generated code)
+  - FreeBSD users: See [[https://github.com/babashka/babashka/releases][Babashka releases]] and [[https://github.com/babashka/freebsd-compat-test][FreeBSD compatibility notes]]
+  - Other systems: Follow [[https://babashka.org/#installation][official installation guide]]
 
 ** Exercise Steps
 
-1. **Fork or Clone** this repository:
+1. *Fork or Clone* this repository:
    #+begin_src bash
    git clone https://github.com/aygp-dr/gemini-repl-006.git
    cd gemini-repl-006
    #+end_src
 
-2. **Read** the =CLOJURE-GEMINI-REPL.org= file to understand the system design
+2. *Read* the =CLOJURE-GEMINI-REPL.org= file to understand the system design
 
-3. **Use your AI assistant** to:
+3. *Use your AI assistant* to:
    - Extract (tangle) all the code from the org file
    - Set up the project structure
    - Configure the environment
    - Run tests
    - Start the REPL
 
-4. **Document** your process:
+4. *Document* your process:
    - What prompts worked well?
    - What challenges did you encounter?
    - How did you guide the AI to success?
@@ -108,11 +117,11 @@ left for educational purposes. Can you identify and fix them?"
 
 Your implementation will be evaluated on:
 
-1. **Successful Extraction**: Did you extract all files correctly?
-2. **Working Implementation**: Does the REPL run without errors?
-3. **Problem Solving**: How did you handle issues and inconsistencies?
-4. **AI Collaboration**: How effectively did you work with your AI assistant?
-5. **Documentation**: Did you document your process and learnings?
+1. *Successful Extraction*: Did you extract all files correctly?
+2. *Working Implementation*: Does the REPL run without errors?
+3. *Problem Solving*: How did you handle issues and inconsistencies?
+4. *AI Collaboration*: How effectively did you work with your AI assistant?
+5. *Documentation*: Did you document your process and learnings?
 
 * Tips for Success
 
