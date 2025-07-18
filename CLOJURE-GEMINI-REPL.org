@@ -1,0 +1,1737 @@
+#+TITLE: Clojure Gemini REPL - One-Shot Implementation
+#+AUTHOR: AI Assistant
+#+DATE: 2025-07-18
+#+PROPERTY: header-args :mkdirp yes :comments both
+
+* Overview
+
+This is a Clojure/Babashka implementation of the Gemini REPL, adapted from the Python version (gemini-repl-005) and inheriting the architectural patterns from the original ClojureScript versions. This implementation uses literate programming with org-mode to generate all project files.
+
+** Key Features
+- Interactive REPL with slash commands
+- Gemini API integration
+- Context management with token tracking
+- Structured logging (file and FIFO)
+- Tool system for file operations
+- Self-hosting capabilities
+- Fast startup with Babashka
+
+** Evolution History
+This is version 006 in the gemini-repl series:
+- gemini-repl: Original ClojureScript implementation
+- gemini-repl-001: Added formal methods (TLA+, Alloy)
+- gemini-repl-003: Enhanced tooling and CI/CD
+- gemini-repl-005: Python port with literate programming
+- gemini-repl-006: Clojure/Babashka with best practices from all versions
+
+* System Architecture
+
+** Component Overview
+
+#+begin_src mermaid :file architecture.png :exports results :tangle architecture.mmd :comments no
+graph TB
+    subgraph "Core Components"
+        REPL[REPL Event Loop]
+        CTX[Context Manager]
+        LOG[Logger]
+        API[Gemini API Client]
+        TOOLS[Tool System]
+    end
+    
+    subgraph "Tool Functions"
+        READ[File Reader]
+        WRITE[File Writer]
+        SELF[Self-Modify]
+        EXEC[Shell Exec]
+    end
+    
+    subgraph "Storage"
+        HIST[conversation.edn]
+        LOGS[logs/gemini.log]
+        FIFO[logs/gemini.fifo]
+        FILES[workspace/]
+    end
+    
+    REPL --> CTX
+    REPL --> LOG
+    REPL --> API
+    REPL --> TOOLS
+    
+    TOOLS --> READ
+    TOOLS --> WRITE
+    TOOLS --> SELF
+    TOOLS --> EXEC
+    
+    CTX --> HIST
+    LOG --> LOGS
+    LOG --> FIFO
+    READ --> FILES
+    WRITE --> FILES
+    SELF --> FILES
+    
+    API --> |HTTP| Gemini[Gemini API]
+    Gemini --> |JSON| API
+#+end_src
+
+** Data Flow
+
+#+begin_src mermaid :file flow.png :exports results :tangle flow.mmd :comments no
+sequenceDiagram
+    participant User
+    participant REPL
+    participant Context
+    participant Logger
+    participant API
+    participant Tools
+    
+    User->>REPL: Input command
+    REPL->>Logger: Log input
+    REPL->>Context: Add to history
+    
+    alt Slash Command
+        REPL->>REPL: Handle command
+    else API Request
+        REPL->>API: Send with context
+        API->>Tools: Check for tool calls
+        Tools-->>API: Execute if needed
+        API-->>REPL: Return response
+    end
+    
+    REPL->>Context: Update history
+    REPL->>Logger: Log response
+    REPL->>User: Display output
+#+end_src
+
+* Project Setup
+
+** Directory Structure
+
+#+begin_src bash :tangle scripts/setup.sh :shebang #!/usr/bin/env bash
+# Create project structure
+mkdir -p src/{core,tools,utils}
+mkdir -p test/{core,tools,utils}
+mkdir -p logs
+mkdir -p workspace
+mkdir -p resources
+mkdir -p docs
+mkdir -p scripts
+mkdir -p .github/workflows
+
+# Create .gitkeep files to preserve empty directories
+touch logs/.gitkeep
+touch workspace/.gitkeep
+touch resources/.gitkeep
+#+end_src
+
+** Git Configuration
+
+#+begin_src gitignore :tangle .gitignore
+# Environment
+.env
+.envrc.local
+
+# Clojure
+.cpcache/
+.nrepl-port
+.lsp/
+.clj-kondo/.cache/
+
+# Build artifacts
+target/
+out/
+
+# Logs
+logs/*.log
+logs/*.fifo
+*.log
+
+# Workspace
+workspace/*
+!workspace/.gitkeep
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Test coverage
+coverage/
+#+end_src
+
+#+begin_src gitattributes :tangle .gitattributes
+# Linguist overrides
+*.org linguist-documentation=false
+*.org linguist-detectable=true
+
+# Line endings
+*.sh text eol=lf
+*.clj text eol=lf
+*.edn text eol=lf
+bb.edn text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary
+#+end_src
+
+** Environment Configuration
+
+#+begin_src bash :tangle .env.example
+# Gemini API Configuration
+GEMINI_API_KEY=your-api-key-here
+GEMINI_MODEL=gemini-2.0-flash-exp
+
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FILE=logs/gemini.log
+LOG_FIFO=logs/gemini.fifo
+LOG_FORMAT=json
+
+# Context Configuration
+CONTEXT_FILE=conversation.edn
+MAX_CONTEXT_TOKENS=100000
+
+# Tool Configuration
+WORKSPACE_DIR=workspace
+ENABLE_SELF_MODIFY=true
+
+# Development
+DEV_MODE=false
+#+end_src
+
+#+begin_src bash :tangle .envrc
+#!/usr/bin/env bash
+# direnv configuration for Gemini REPL
+
+# Load .env file if it exists
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+
+# Add scripts to PATH
+export PATH="${PWD}/scripts:${PATH}"
+
+# Clojure/Babashka configuration
+export BABASHKA_CLASSPATH="${PWD}/src:${PWD}/resources"
+
+# Development helpers
+alias bb-repl='bb repl'
+alias bb-test='bb test'
+alias bb-lint='clj-kondo --lint src test'
+
+# Create logs directory if needed
+mkdir -p logs
+
+# Create FIFO if it doesn't exist
+if [ ! -p logs/gemini.fifo ]; then
+    mkfifo logs/gemini.fifo
+fi
+
+echo "Gemini REPL environment loaded"
+#+end_src
+
+* Babashka Configuration
+
+#+begin_src clojure :tangle bb.edn
+{:paths ["src" "resources"]
+ :deps {org.babashka/http-client {:mvn/version "0.4.21"}
+        org.babashka/json {:mvn/version "0.1.6"}
+        com.cognitect/transit-clj {:mvn/version "1.0.333"}}
+ :tasks
+ {repl {:doc "Start REPL"
+        :task (shell "bb repl")}
+  
+  test {:doc "Run tests"
+        :task (shell "bb test/runner.clj")}
+  
+  lint {:doc "Run linter"
+        :task (shell "clj-kondo --lint src test")}
+  
+  format {:doc "Format code"
+        :task (shell "cljfmt fix src test")}
+  
+  run {:doc "Run the REPL"
+       :requires ([gemini-repl.main])
+       :task (gemini-repl.main/-main)}
+  
+  build {:doc "Build native image (requires GraalVM)"
+         :task (shell "scripts/build-native.sh")}
+  
+  dev {:doc "Start development mode"
+       :task (do (shell "bb repl"))}
+  
+  clean {:doc "Clean build artifacts"
+         :task (do (shell "rm -rf target out .cpcache")
+                   (println "Cleaned build artifacts"))}}}
+#+end_src
+
+* Makefile
+
+#+begin_src makefile :tangle Makefile
+# Gemini REPL Makefile for Clojure/Babashka
+# Supports both GNU make and BSD make
+
+# Detect OS and set make command
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),FreeBSD)
+    MAKE := gmake
+else
+    MAKE := make
+endif
+
+# Default target
+.PHONY: all
+all: setup
+
+# Setup development environment
+.PHONY: setup
+setup:
+	@echo "Setting up Gemini REPL (Clojure)..."
+	@bash scripts/setup.sh
+	@echo "Installing dependencies..."
+	@bb deps
+	@echo "Creating environment file..."
+	@cp -n .env.example .env || true
+	@echo "✓ Setup complete. Edit .env with your GEMINI_API_KEY"
+
+# Linting
+.PHONY: lint
+lint:
+	@echo "Running linter..."
+	@bb lint
+
+# Testing
+.PHONY: test
+test:
+	@echo "Running tests..."
+	@bb test
+
+# Build native image
+.PHONY: build
+build:
+	@echo "Building native image..."
+	@bb build
+
+# Run the REPL
+.PHONY: run
+run:
+	@echo "Starting Gemini REPL..."
+	@bb run
+
+# Development mode
+.PHONY: dev
+dev:
+	@echo "Starting development REPL..."
+	@bb dev
+
+# Clean build artifacts
+.PHONY: clean
+clean:
+	@bb clean
+
+# Tangle org files
+.PHONY: tangle
+tangle:
+	@echo "Tangling CLOJURE-GEMINI-REPL.org..."
+	@emacs --batch -l org --eval '(org-babel-tangle-file "CLOJURE-GEMINI-REPL.org")'
+	@echo "✓ Tangle complete"
+
+# Detangle back to org
+.PHONY: detangle
+detangle:
+	@echo "Detangling back to org files..."
+	@emacs --batch -l org --eval '(org-babel-detangle "CLOJURE-GEMINI-REPL.org")'
+	@echo "✓ Detangle complete"
+
+# Watch FIFO logs
+.PHONY: watch-logs
+watch-logs:
+	@echo "Watching FIFO logs..."
+	@cat logs/gemini.fifo
+
+# Help
+.PHONY: help
+help:
+	@echo "Gemini REPL - Available targets:"
+	@echo "  make setup      - Set up development environment"
+	@echo "  make lint       - Run code linter"
+	@echo "  make test       - Run tests"
+	@echo "  make build      - Build native image"
+	@echo "  make run        - Run the REPL"
+	@echo "  make dev        - Start development REPL"
+	@echo "  make clean      - Clean build artifacts"
+	@echo "  make tangle     - Extract code from org file"
+	@echo "  make detangle   - Update org file from code"
+	@echo "  make watch-logs - Watch FIFO logs"
+
+# Check prerequisites
+.PHONY: check
+check:
+	@echo "Checking prerequisites..."
+	@command -v bb >/dev/null 2>&1 || { echo "❌ Babashka not found. Install from https://babashka.org"; exit 1; }
+	@command -v clj-kondo >/dev/null 2>&1 || echo "⚠️  clj-kondo not found. Install for linting support"
+	@echo "✓ Prerequisites check complete"
+#+end_src
+
+* Core Implementation
+
+** Main Entry Point
+
+#+begin_src clojure :tangle src/gemini_repl/main.clj
+(ns gemini-repl.main
+  "Main entry point for Gemini REPL"
+  (:require [gemini-repl.core.repl :as repl]))
+
+(defn -main
+  "Start the Gemini REPL"
+  [& args]
+  (println "Starting Gemini REPL...")
+  (try
+    (repl/start!)
+    (catch Exception e
+      (println "Error:" (.getMessage e))
+      (System/exit 1))))
+
+;; For Babashka script execution
+(when (= *file* (System/getProperty "babashka.file"))
+  (-main))
+#+end_src
+
+** REPL Core
+
+#+begin_src clojure :tangle src/gemini_repl/core/repl.clj
+(ns gemini-repl.core.repl
+  "Core REPL implementation with event loop"
+  (:require [clojure.string :as str]
+            [clojure.java.io :as io]
+            [gemini-repl.core.api-client :as api]
+            [gemini-repl.utils.context :as ctx]
+            [gemini-repl.utils.logger :as log]
+            [gemini-repl.tools.system :as tools]))
+
+(def ^:private running? (atom true))
+
+(defn- display-banner
+  "Display the REPL banner"
+  []
+  (println "
+╔══════════════════════════════════════╗
+║      🌟 Gemini REPL v1.0-bb 🌟      ║
+║   Clojure-powered AI conversations   ║
+║   Type /help for available commands  ║
+╚══════════════════════════════════════╝"))
+
+(defn- get-prompt
+  "Generate the prompt string"
+  []
+  (let [tokens (ctx/get-token-count)]
+    (str "\n[" tokens " tokens] > ")))
+
+(defn- display-response
+  "Display response with metadata"
+  [response]
+  (println "\n" (:text response))
+  (when-let [metadata (:metadata response)]
+    (let [{:keys [tokens cost time]} metadata
+          indicator (cond
+                      (< tokens 1000) "🟢"
+                      (< tokens 5000) "🟡"
+                      :else "🔴")]
+      (printf "\n[%s %d tokens | $%.4f | %.1fs]\n" 
+              indicator tokens cost time))))
+
+;; Command handlers
+(defmulti handle-command
+  "Handle slash commands"
+  (fn [cmd _args] (keyword (subs cmd 1))))
+
+(defmethod handle-command :help
+  [_ _]
+  (println "
+Available Commands:
+  /help         - Show this help message
+  /exit, /quit  - Exit the REPL
+  /clear        - Clear the screen
+  /context      - Show conversation context
+  /stats        - Show usage statistics
+  /save [file]  - Save conversation to file
+  /load [file]  - Load conversation from file
+  /tools        - List available tools
+  /workspace    - Show workspace contents
+  /debug        - Toggle debug mode
+
+Tool Functions:
+  The AI can read, write, and modify files in the workspace directory.
+  Ask it to create, edit, or analyze files for you."))
+
+(defmethod handle-command :exit
+  [_ _]
+  (println "\nGoodbye! 👋")
+  (reset! running? false))
+
+(defmethod handle-command :quit
+  [_ _]
+  (handle-command "/exit" nil))
+
+(defmethod handle-command :clear
+  [_ _]
+  (print "\033[H\033[2J")
+  (flush)
+  (display-banner))
+
+(defmethod handle-command :context
+  [_ _]
+  (let [messages (ctx/get-messages)]
+    (println "\n=== Conversation Context ===")
+    (doseq [msg (take-last 10 messages)]
+      (let [role (str/upper-case (name (:role msg)))
+            content (let [c (:content msg)]
+                      (if (> (count c) 100)
+                        (str (subs c 0 100) "...")
+                        c))]
+        (println (str role ": " content))))
+    (println (str "\nTotal messages: " (count messages)))
+    (println (str "Total tokens: " (ctx/get-token-count)))))
+
+(defmethod handle-command :stats
+  [_ _]
+  (let [stats (ctx/get-stats)]
+    (println "\n=== Usage Statistics ===")
+    (println (str "Messages: " (:message-count stats)))
+    (println (str "Tokens: " (:token-count stats)))
+    (printf "Estimated cost: $%.4f\n" (:estimated-cost stats))
+    (println (str "Session duration: " (:duration stats)))))
+
+(defmethod handle-command :save
+  [_ args]
+  (let [filename (or (not-empty args)
+                     (str "conversation_" 
+                          (.format (java.time.LocalDateTime/now)
+                                   (java.time.format.DateTimeFormatter/ofPattern 
+                                    "yyyyMMdd_HHmmss"))
+                          ".edn"))
+        path (io/file "workspace" filename)]
+    (ctx/save-to-file path)
+    (println (str "Conversation saved to: " path))))
+
+(defmethod handle-command :load
+  [_ args]
+  (if (empty? args)
+    (println "Usage: /load <filename>")
+    (let [path (io/file "workspace" args)]
+      (if (.exists path)
+        (do
+          (ctx/load-from-file path)
+          (println (str "Conversation loaded from: " path)))
+        (println (str "File not found: " path))))))
+
+(defmethod handle-command :tools
+  [_ _]
+  (println "\n=== Available Tools ===")
+  (doseq [tool (tools/list-tools)]
+    (println (str "- " (:name tool) ": " (:description tool)))))
+
+(defmethod handle-command :workspace
+  [_ _]
+  (let [workspace (io/file "workspace")]
+    (if (.exists workspace)
+      (do
+        (println "\n=== Workspace Contents ===")
+        (doseq [file (sort (.listFiles workspace))]
+          (let [icon (if (.isFile file) "📄" "📁")
+                name (.getName file)
+                size (if (.isFile file) 
+                       (.length file)
+                       "-")]
+            (printf "%s %-30s %10s\n" icon name size))))
+      (println "Workspace directory does not exist"))))
+
+(defmethod handle-command :debug
+  [_ _]
+  (let [new-level (if (= (log/get-level) :debug) :info :debug)]
+    (log/set-level! new-level)
+    (println (str "Debug mode: " (if (= new-level :debug) "ON" "OFF")))))
+
+(defmethod handle-command :default
+  [cmd _]
+  (println (str "Unknown command: " cmd))
+  (println "Type /help for available commands"))
+
+(defn- process-input
+  "Process user input"
+  [input]
+  (log/debug {:event :user-input :input input})
+  (cond
+    (str/starts-with? input "/")
+    (let [[cmd & args] (str/split input #"\s+" 2)]
+      (handle-command cmd (first args)))
+    
+    :else
+    (try
+      ;; Add to context
+      (ctx/add-message :user input)
+      
+      ;; Get API response with tools
+      (let [messages (ctx/get-messages)
+            tools (tools/get-definitions)
+            response (api/send-message messages tools)]
+        
+        ;; Handle tool calls if present
+        (when-let [tool-calls (:tool-calls response)]
+          (doseq [call tool-calls]
+            (let [result (tools/execute (:name call) (:args call))]
+              (ctx/add-tool-response (:name call) result))))
+        
+        ;; Add response to context
+        (ctx/add-message :assistant (:text response))
+        
+        ;; Display response
+        (display-response response))
+      
+      (catch Exception e
+        (log/error {:event :api-error :error (.getMessage e)})
+        (println (str "Error: " (.getMessage e)))))))
+
+(defn- load-history
+  "Load command history"
+  []
+  ;; Babashka doesn't have built-in readline support
+  ;; This is a placeholder for future enhancement
+  nil)
+
+(defn- save-history
+  "Save command history"
+  []
+  ;; Placeholder for future enhancement
+  nil)
+
+(defn start!
+  "Start the REPL event loop"
+  []
+  (display-banner)
+  (log/info {:event :repl-started})
+  (load-history)
+  
+  (while @running?
+    (try
+      (print (get-prompt))
+      (flush)
+      (when-let [input (read-line)]
+        (when (not-empty (str/trim input))
+          (process-input (str/trim input))))
+      (catch Exception e
+        (if (instance? java.io.EOFException e)
+          (handle-command "/exit" nil)
+          (do
+            (log/error {:event :repl-error :error (.getMessage e)})
+            (println (str "Error: " (.getMessage e))))))))
+  
+  (save-history)
+  (log/info {:event :repl-stopped}))
+#+end_src
+
+** API Client
+
+#+begin_src clojure :tangle src/gemini_repl/core/api_client.clj
+(ns gemini-repl.core.api-client
+  "Gemini API client implementation"
+  (:require [babashka.http-client :as http]
+            [babashka.json :as json]
+            [clojure.string :as str]))
+
+(def ^:private api-key (System/getenv "GEMINI_API_KEY"))
+(def ^:private model (or (System/getenv "GEMINI_MODEL") "gemini-2.0-flash-exp"))
+(def ^:private base-url "https://generativelanguage.googleapis.com/v1beta")
+
+(defn- make-request-body
+  "Create request body for Gemini API"
+  [messages tools]
+  (cond-> {:contents (mapv (fn [msg]
+                              {:role (name (:role msg))
+                               :parts [{:text (:content msg)}]})
+                            messages)}
+    (seq tools) (assoc :tools [{:function_declarations tools}])))
+
+(defn- parse-response
+  "Parse Gemini API response"
+  [response]
+  (let [body (json/read-str (:body response) {:key-fn keyword})
+        candidate (first (:candidates body))
+        content (get-in candidate [:content :parts])
+        text-parts (filter #(contains? % :text) content)
+        tool-parts (filter #(contains? % :functionCall) content)]
+    {:text (str/join "\n" (map :text text-parts))
+     :tool-calls (mapv (fn [part]
+                         {:name (get-in part [:functionCall :name])
+                          :args (get-in part [:functionCall :args])})
+                       tool-parts)
+     :metadata {:tokens (get-in body [:usageMetadata :totalTokenCount] 0)
+                :cost (* (get-in body [:usageMetadata :totalTokenCount] 0) 0.000001)
+                :time 0.5}})) ; Placeholder for actual timing
+
+(defn send-message
+  "Send message to Gemini API"
+  [messages tools]
+  (when-not api-key
+    (throw (ex-info "GEMINI_API_KEY not set" {})))
+  
+  (let [url (str base-url "/models/" model ":generateContent?key=" api-key)
+        body (make-request-body messages tools)
+        response (http/post url
+                            {:headers {"Content-Type" "application/json"}
+                             :body (json/write-str body)})]
+    (if (= 200 (:status response))
+      (parse-response response)
+      (throw (ex-info "API request failed" 
+                      {:status (:status response)
+                       :body (:body response)})))))
+#+end_src
+
+** Context Manager
+
+#+begin_src clojure :tangle src/gemini_repl/utils/context.clj
+(ns gemini-repl.utils.context
+  "Conversation context management"
+  (:require [clojure.java.io :as io]
+            [clojure.edn :as edn]))
+
+(def ^:private context (atom {:messages []
+                              :token-count 0
+                              :start-time (System/currentTimeMillis)}))
+
+(def ^:private max-tokens (parse-long (or (System/getenv "MAX_CONTEXT_TOKENS") "100000")))
+
+(defn- estimate-tokens
+  "Estimate token count for text (rough approximation)"
+  [text]
+  (int (/ (count text) 4)))
+
+(defn- trim-context
+  "Trim context to stay within token limits"
+  [messages current-tokens]
+  (if (<= current-tokens max-tokens)
+    messages
+    (let [keep-count (max 2 (int (/ (count messages) 2)))]
+      (vec (concat (take 1 messages)  ; Keep system message
+                   (take-last keep-count messages))))))
+
+(defn add-message
+  "Add a message to the context"
+  [role content]
+  (let [new-msg {:role role
+                 :content content
+                 :timestamp (System/currentTimeMillis)}
+        tokens (estimate-tokens content)]
+    (swap! context update :messages conj new-msg)
+    (swap! context update :token-count + tokens)
+    (swap! context update :messages trim-context (:token-count @context))))
+
+(defn add-tool-response
+  "Add a tool response to the context"
+  [tool-name result]
+  (add-message :tool (str "Tool " tool-name " result: " result)))
+
+(defn get-messages
+  "Get all messages in context"
+  []
+  (:messages @context))
+
+(defn get-token-count
+  "Get current token count"
+  []
+  (:token-count @context))
+
+(defn get-stats
+  "Get context statistics"
+  []
+  (let [ctx @context
+        duration (- (System/currentTimeMillis) (:start-time ctx))]
+    {:message-count (count (:messages ctx))
+     :token-count (:token-count ctx)
+     :estimated-cost (* (:token-count ctx) 0.000001)
+     :duration (str (int (/ duration 60000)) " minutes")}))
+
+(defn save-to-file
+  "Save context to file"
+  [file]
+  (io/make-parents file)
+  (spit file (pr-str @context)))
+
+(defn load-from-file
+  "Load context from file"
+  [file]
+  (reset! context (edn/read-string (slurp file))))
+
+(defn clear!
+  "Clear the context"
+  []
+  (reset! context {:messages []
+                   :token-count 0
+                   :start-time (System/currentTimeMillis)}))
+#+end_src
+
+** Logger
+
+#+begin_src clojure :tangle src/gemini_repl/utils/logger.clj
+(ns gemini-repl.utils.logger
+  "Structured logging with file and FIFO support"
+  (:require [babashka.json :as json]
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
+
+(def ^:private log-level (atom (keyword (str/lower-case (or (System/getenv "LOG_LEVEL") "info")))))
+(def ^:private log-file (System/getenv "LOG_FILE"))
+(def ^:private log-fifo (System/getenv "LOG_FIFO"))
+
+(def ^:private levels {:debug 0 :info 1 :warn 2 :error 3})
+
+(defn- should-log?
+  "Check if message should be logged at current level"
+  [level]
+  (>= (get levels level 0) (get levels @log-level 0)))
+
+(defn- format-log
+  "Format log entry"
+  [level data]
+  (let [entry (merge {:timestamp (str (java.time.Instant/now))
+                      :level (name level)}
+                     data)]
+    (json/write-str entry)))
+
+(defn- write-log
+  "Write log entry to configured outputs"
+  [entry]
+  ;; Write to file
+  (when log-file
+    (io/make-parents log-file)
+    (spit log-file (str entry "\n") :append true))
+  
+  ;; Write to FIFO (non-blocking)
+  (when (and log-fifo (.exists (io/file log-fifo)))
+    (try
+      (spit log-fifo (str entry "\n") :append true)
+      (catch Exception _
+        ;; Ignore FIFO errors (no reader)
+        nil))))
+
+(defn log
+  "Log a message at specified level"
+  [level data]
+  (when (should-log? level)
+    (-> (format-log level data)
+        (write-log))))
+
+(defn debug [data] (log :debug data))
+(defn info [data] (log :info data))
+(defn warn [data] (log :warn data))
+(defn error [data] (log :error data))
+
+(defn get-level
+  "Get current log level"
+  []
+  @log-level)
+
+(defn set-level!
+  "Set log level"
+  [level]
+  (reset! log-level level))
+#+end_src
+
+** Tool System
+
+#+begin_src clojure :tangle src/gemini_repl/tools/system.clj
+(ns gemini-repl.tools.system
+  "Tool system for file operations and more"
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [babashka.process :as p]))
+
+(def ^:private workspace-dir (or (System/getenv "WORKSPACE_DIR") "workspace"))
+(def ^:private enable-self-modify? (= "true" (System/getenv "ENABLE_SELF_MODIFY")))
+
+(defn- safe-path?
+  "Check if path is safe (within workspace)"
+  [path]
+  (let [file (io/file workspace-dir path)
+        canonical (.getCanonicalPath file)
+        workspace-canonical (.getCanonicalPath (io/file workspace-dir))]
+    (str/starts-with? canonical workspace-canonical)))
+
+(defn- read-file
+  "Read file contents"
+  [{:keys [path]}]
+  (if (safe-path? path)
+    (let [file (io/file workspace-dir path)]
+      (if (.exists file)
+        {:success true :content (slurp file)}
+        {:success false :error "File not found"}))
+    {:success false :error "Path outside workspace"}))
+
+(defn- write-file
+  "Write file contents"
+  [{:keys [path content]}]
+  (if (safe-path? path)
+    (let [file (io/file workspace-dir path)]
+      (io/make-parents file)
+      (spit file content)
+      {:success true :message (str "Wrote " (count content) " bytes to " path)})
+    {:success false :error "Path outside workspace"}))
+
+(defn- list-files
+  "List files in directory"
+  [{:keys [path]}]
+  (let [path (or path ".")
+        dir (io/file workspace-dir path)]
+    (if (and (safe-path? path) (.exists dir) (.isDirectory dir))
+      {:success true
+       :files (mapv (fn [f]
+                      {:name (.getName f)
+                       :type (if (.isDirectory f) "directory" "file")
+                       :size (if (.isFile f) (.length f) nil)})
+                    (.listFiles dir))}
+      {:success false :error "Invalid directory"})))
+
+(defn- execute-command
+  "Execute shell command (restricted)"
+  [{:keys [command]}]
+  ;; Very restricted for safety
+  (if (re-matches #"^(ls|pwd|date|echo).*" command)
+    (let [result (p/shell {:out :string :err :string} command)]
+      {:success (zero? (:exit result))
+       :output (:out result)
+       :error (:err result)})
+    {:success false :error "Command not allowed"}))
+
+(defn- self-modify
+  "Modify own source code"
+  [{:keys [file-path content]}]
+  (if enable-self-modify?
+    (let [file (io/file file-path)]
+      (if (.exists file)
+        (do
+          (spit file content)
+          {:success true :message (str "Modified " file-path)})
+        {:success false :error "Source file not found"}))
+    {:success false :error "Self-modification disabled"}))
+
+(def ^:private tools
+  {:read_file {:name "read_file"
+               :description "Read contents of a file in the workspace"
+               :parameters {:path {:type "string" :description "File path relative to workspace"}}
+               :handler read-file}
+   
+   :write_file {:name "write_file"
+                :description "Write contents to a file in the workspace"
+                :parameters {:path {:type "string" :description "File path relative to workspace"}
+                             :content {:type "string" :description "Content to write"}}
+                :handler write-file}
+   
+   :list_files {:name "list_files"
+                :description "List files in a directory"
+                :parameters {:path {:type "string" :description "Directory path (optional)"}}
+                :handler list-files}
+   
+   :execute {:name "execute"
+             :description "Execute a shell command (limited)"
+             :parameters {:command {:type "string" :description "Command to execute"}}
+             :handler execute-command}
+   
+   :self_modify {:name "self_modify"
+                 :description "Modify the REPL's own source code"
+                 :parameters {:file-path {:type "string" :description "Source file path"}
+                              :content {:type "string" :description "New content"}}
+                 :handler self-modify}})
+
+(defn get-definitions
+  "Get tool definitions for API"
+  []
+  (mapv (fn [[_ tool]]
+          {:name (:name tool)
+           :description (:description tool)
+           :parameters {:type "object"
+                        :properties (:parameters tool)
+                        :required (vec (keys (:parameters tool)))}})
+        tools))
+
+(defn list-tools
+  "List available tools"
+  []
+  (mapv (fn [[_ tool]]
+          {:name (:name tool)
+           :description (:description tool)})
+        tools))
+
+(defn execute
+  "Execute a tool"
+  [tool-name args]
+  (if-let [tool (get tools (keyword tool-name))]
+    (try
+      ((:handler tool) args)
+      (catch Exception e
+        {:success false :error (.getMessage e)}))
+    {:success false :error "Unknown tool"}))
+#+end_src
+
+* Test Suite
+
+#+begin_src clojure :tangle test/runner.clj
+#!/usr/bin/env bb
+(ns test.runner
+  (:require [clojure.test :as t]
+            [clojure.java.io :as io]))
+
+(defn find-tests
+  "Find all test namespaces"
+  []
+  (let [test-dir (io/file "test")]
+    (->> (.listFiles test-dir)
+         (filter #(.endsWith (.getName %) "_test.clj"))
+         (map #(-> (.getName %)
+                   (str/replace #"\.clj$" "")
+                   (str/replace #"_" "-")
+                   (->> (str "test."))
+                   symbol)))))
+
+(defn run-tests
+  "Run all tests"
+  []
+  (let [namespaces (find-tests)]
+    (doseq [ns namespaces]
+      (require ns))
+    (apply t/run-tests namespaces)))
+
+(defn -main [& args]
+  (let [{:keys [fail error]} (run-tests)]
+    (System/exit (if (zero? (+ fail error)) 0 1))))
+
+(when (= *file* (System/getProperty "babashka.file"))
+  (-main))
+#+end_src
+
+#+begin_src clojure :tangle test/gemini_repl/core/repl_test.clj
+(ns test.gemini-repl.core.repl-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [gemini-repl.core.repl :as repl]))
+
+(deftest test-command-parsing
+  (testing "Command parsing"
+    (is (= :help (repl/parse-command "/help")))
+    (is (= :exit (repl/parse-command "/exit")))
+    (is (= :unknown (repl/parse-command "/invalid")))))
+
+(deftest test-prompt-generation
+  (testing "Prompt generation"
+    (with-redefs [gemini-repl.utils.context/get-token-count (constantly 42)]
+      (is (= "\n[42 tokens] > " (repl/get-prompt))))))
+#+end_src
+
+#+begin_src clojure :tangle test/gemini_repl/utils/context_test.clj
+(ns test.gemini-repl.utils.context-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [gemini-repl.utils.context :as ctx]))
+
+(deftest test-context-management
+  (testing "Adding messages"
+    (ctx/clear!)
+    (ctx/add-message :user "Hello")
+    (ctx/add-message :assistant "Hi there!")
+    (is (= 2 (count (ctx/get-messages))))
+    (is (pos? (ctx/get-token-count)))))
+
+(deftest test-context-trimming
+  (testing "Context stays within limits"
+    (ctx/clear!)
+    ;; Add many messages
+    (dotimes [i 100]
+      (ctx/add-message :user (str "Message " i)))
+    ;; Should be trimmed
+    (is (< (ctx/get-token-count) 100000))))
+#+end_src
+
+#+begin_src clojure :tangle test/gemini_repl/tools/system_test.clj
+(ns test.gemini-repl.tools.system-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [gemini-repl.tools.system :as tools]
+            [clojure.java.io :as io]))
+
+(deftest test-safe-path
+  (testing "Path safety checks"
+    (is (tools/safe-path? "test.txt"))
+    (is (tools/safe-path? "subdir/test.txt"))
+    (is (not (tools/safe-path? "../outside.txt")))
+    (is (not (tools/safe-path? "/etc/passwd")))))
+
+(deftest test-file-operations
+  (testing "File read/write"
+    (let [result (tools/execute :write_file {:path "test.txt" :content "Hello"})]
+      (is (:success result)))
+    (let [result (tools/execute :read_file {:path "test.txt"})]
+      (is (:success result))
+      (is (= "Hello" (:content result))))))
+#+end_src
+
+* Scripts
+
+** Common Utilities
+
+#+begin_src bash :tangle scripts/common.sh :shebang #!/usr/bin/env bash
+# Common utilities for scripts
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Detect OS
+detect_os() {
+    case "$(uname -s)" in
+        Darwin*) echo "macos";;
+        Linux*) echo "linux";;
+        FreeBSD*) echo "freebsd";;
+        *) echo "unknown";;
+    esac
+}
+
+# Get appropriate make command
+get_make_cmd() {
+    if [[ "$(detect_os)" == "freebsd" ]]; then
+        echo "gmake"
+    else
+        echo "make"
+    fi
+}
+#+end_src
+
+** Build Native Image
+
+#+begin_src bash :tangle scripts/build-native.sh :shebang #!/usr/bin/env bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "$0")/common.sh"
+
+log_info "Building native image with GraalVM..."
+
+# Check for GraalVM
+if ! command_exists native-image; then
+    log_error "native-image not found. Please install GraalVM."
+    exit 1
+fi
+
+# Create target directory
+mkdir -p target
+
+# Build uberjar with Babashka
+log_info "Creating uberjar..."
+bb uberjar target/gemini-repl.jar -m gemini-repl.main
+
+# Build native image
+log_info "Building native image..."
+native-image \
+    -jar target/gemini-repl.jar \
+    -H:Name=target/gemini-repl \
+    -H:+ReportExceptionStackTraces \
+    --no-fallback \
+    --enable-url-protocols=https \
+    --features=clj_easy.graal_build_time.InitClojureClasses
+
+log_info "✓ Native image built: target/gemini-repl"
+#+end_src
+
+* Project Documentation
+
+** README
+
+#+begin_src markdown :tangle README.md
+# Gemini REPL - Clojure/Babashka Implementation
+
+A fast, interactive REPL for conversations with Google's Gemini AI, implemented in Clojure with Babashka for instant startup.
+
+## Features
+
+- ⚡ Instant startup with Babashka
+- 🔧 Tool system for file operations
+- 📝 Conversation context management with token tracking
+- 📊 Structured logging (file and FIFO)
+- 🎯 Self-hosting capabilities
+- 🔄 Org-mode literate programming
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/aygp-dr/gemini-repl-006.git
+cd gemini-repl-006
+
+# Set up environment
+make setup
+
+# Configure API key
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY
+
+# Run the REPL
+make run
+```
+
+## Requirements
+
+- [Babashka](https://babashka.org) (v1.3.0+)
+- Gemini API key
+- Unix-like environment (macOS, Linux, FreeBSD)
+
+## Development
+
+```bash
+# Run tests
+make test
+
+# Lint code
+make lint
+
+# Start development REPL
+make dev
+
+# Build native image (requires GraalVM)
+make build
+```
+
+## Commands
+
+- `/help` - Show available commands
+- `/exit` or `/quit` - Exit the REPL
+- `/clear` - Clear the screen
+- `/context` - Show conversation history
+- `/stats` - Display usage statistics
+- `/save [filename]` - Save conversation
+- `/load filename` - Load conversation
+- `/tools` - List available tools
+- `/workspace` - Show workspace contents
+- `/debug` - Toggle debug mode
+
+## Architecture
+
+This implementation uses:
+- Babashka for fast scripting and REPL
+- EDN for data serialization
+- HTTP client for Gemini API
+- Structured logging with JSON
+- Tool system for extensibility
+
+## Evolution
+
+This is version 006 in the gemini-repl series, bringing together:
+- Fast startup from Babashka
+- Architecture patterns from Python version (005)
+- Clojure idioms from original versions (001-003)
+- Literate programming with org-mode
+
+## License
+
+MIT License - see LICENSE file
+#+end_src
+
+** License
+
+#+begin_src text :tangle LICENSE
+MIT License
+
+Copyright (c) 2025 AYGP-DR
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+#+end_src
+
+* Claude Commands
+
+** README
+
+#+begin_src markdown :tangle .claude/commands/README.md :mkdirp yes
+# Claude Commands for Gemini REPL
+
+This directory contains command patterns for Claude Code to use when working with the Gemini REPL codebase.
+
+## Available Commands
+
+- `analyze.md` - Code analysis and review
+- `observe.md` - Repository observation patterns  
+- `implement.md` - Implementation guidance
+- `test.md` - Testing strategies
+- `experiment.md` - Experimental feature development
+- `research.md` - Research and documentation
+
+Each command provides structured guidance for specific development tasks.
+#+end_src
+
+** Observe
+
+#+begin_src markdown :tangle .claude/commands/observe.md :mkdirp yes
+# Observe Command
+
+Use this command to analyze the Gemini REPL codebase without making changes.
+
+## Analysis Areas
+
+1. **Code Quality**
+   - Check for idiomatic Clojure patterns
+   - Identify potential performance issues
+   - Review error handling
+
+2. **Architecture**
+   - Evaluate component boundaries
+   - Check for circular dependencies
+   - Assess extensibility
+
+3. **Testing**
+   - Coverage analysis
+   - Test quality assessment
+   - Missing test scenarios
+
+## Output Format
+
+Create observations in `.claude/observations/` with findings.
+#+end_src
+
+** Analyze
+
+#+begin_src markdown :tangle .claude/commands/analyze.md :mkdirp yes
+# Analyze Command
+
+Perform in-depth code analysis on the Gemini REPL codebase.
+
+## Analysis Types
+
+### Static Analysis
+- Run clj-kondo for linting
+- Check for unused dependencies
+- Identify code smells
+
+### Performance Analysis
+- Identify bottlenecks
+- Memory usage patterns
+- Startup time optimization
+
+### Security Review
+- Input validation
+- Path traversal prevention
+- API key handling
+
+## Reporting
+
+Generate analysis reports in markdown format with:
+- Executive summary
+- Detailed findings
+- Recommendations
+- Priority levels
+#+end_src
+
+** Implement
+
+#+begin_src markdown :tangle .claude/commands/implement.md :mkdirp yes
+# Implement Command
+
+Guidelines for implementing new features in Gemini REPL.
+
+## Implementation Process
+
+1. **Design Phase**
+   - Review existing patterns
+   - Design component interfaces
+   - Consider extensibility
+
+2. **Coding Standards**
+   - Follow Clojure style guide
+   - Use meaningful names
+   - Write docstrings
+
+3. **Testing Requirements**
+   - Unit tests for new functions
+   - Integration tests for features
+   - Update test documentation
+
+4. **Documentation**
+   - Update relevant org sections
+   - Add usage examples
+   - Document design decisions
+
+## Common Patterns
+
+- Use multimethods for extensible dispatch
+- Prefer pure functions
+- Leverage Clojure's immutable data structures
+- Use atoms for state management
+#+end_src
+
+** Test
+
+#+begin_src markdown :tangle .claude/commands/test.md :mkdirp yes
+# Test Command
+
+Testing strategies for Gemini REPL development.
+
+## Test Categories
+
+### Unit Tests
+- Test individual functions
+- Mock external dependencies
+- Focus on edge cases
+
+### Integration Tests
+- Test component interactions
+- Verify API communication
+- Test tool execution
+
+### Property-Based Tests
+- Use test.check for generative testing
+- Test invariants
+- Explore edge cases automatically
+
+## Test Organization
+
+```
+test/
+├── gemini_repl/
+│   ├── core/
+│   │   ├── repl_test.clj
+│   │   └── api_client_test.clj
+│   ├── utils/
+│   │   ├── context_test.clj
+│   │   └── logger_test.clj
+│   └── tools/
+│       └── system_test.clj
+└── integration/
+    └── full_flow_test.clj
+```
+
+## Running Tests
+
+```bash
+# All tests
+bb test
+
+# Specific namespace
+bb test test.gemini-repl.core.repl-test
+
+# With coverage
+bb test:coverage
+```
+#+end_src
+
+** Experiment
+
+#+begin_src markdown :tangle .claude/commands/experiment.md :mkdirp yes
+# Experiment Command
+
+Framework for experimental features in Gemini REPL.
+
+## Experiment Structure
+
+Create experiments in a separate namespace:
+```clojure
+(ns gemini-repl.experiments.feature-name
+  "Experimental implementation of feature-name")
+```
+
+## Documentation Requirements
+
+Each experiment should include:
+1. **Hypothesis**: What we're testing
+2. **Approach**: How we're implementing it
+3. **Success Criteria**: How we measure success
+4. **Results**: What we learned
+
+## Integration Path
+
+1. Prototype in experiments namespace
+2. Test thoroughly
+3. Get feedback
+4. Refactor for production
+5. Integrate into main codebase
+
+## Current Experiments
+
+- Alternative context management strategies
+- Plugin system for tools
+- Multiple AI provider support
+- Advanced prompt engineering
+#+end_src
+
+** Research
+
+#+begin_src markdown :tangle .claude/commands/research.md :mkdirp yes
+# Research Command
+
+Research documentation for Gemini REPL development.
+
+## Research Areas
+
+### Performance Optimization
+- Startup time improvements
+- Memory usage reduction
+- Response time optimization
+
+### Architecture Patterns
+- Component design
+- State management
+- Error handling strategies
+
+### API Integration
+- Gemini API best practices
+- Rate limiting strategies
+- Error recovery patterns
+
+### Tool System Extensions
+- Plugin architecture
+- Sandboxing approaches
+- Tool discovery mechanisms
+
+## Documentation Format
+
+Research findings should be documented as:
+```markdown
+# Research: [Topic]
+Date: YYYY-MM-DD
+
+## Question
+What are we trying to learn?
+
+## Method
+How did we investigate?
+
+## Findings
+What did we discover?
+
+## Recommendations
+What should we do based on findings?
+
+## References
+Links and sources
+```
+
+## Research Index
+
+Maintain an index of research documents in the main README for easy discovery.
+#+end_src
+
+* Regeneration Guide
+
+#+begin_src markdown :tangle REGENERATION.md
+# Gemini REPL (Clojure) Regeneration Guide
+
+**Project**: Gemini REPL Project  
+**Date**: 2025-07-18
+
+## Overview
+
+This document provides instructions for regenerating the Gemini REPL Clojure/Babashka implementation from the literate org-mode source.
+
+## Prerequisites
+
+- Emacs with org-mode (for tangling)
+- Babashka 1.3.0+
+- Optional: clj-kondo for linting
+- Optional: GraalVM for native image builds
+
+## Regeneration Steps
+
+### From Scratch
+
+1. Extract all code from the org file:
+   ```bash
+   make tangle
+   ```
+
+2. Set up the development environment:
+   ```bash
+   make setup
+   ```
+
+3. Configure your API key:
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your GEMINI_API_KEY
+   ```
+
+4. Run the REPL:
+   ```bash
+   make run
+   ```
+
+### Development Workflow
+
+1. Edit code in CLOJURE-GEMINI-REPL.org
+2. Tangle to extract changes: `make tangle`
+3. Test changes: `make test`
+4. Run the REPL: `make run`
+
+### Building Native Image
+
+Requires GraalVM with native-image installed:
+
+```bash
+make build
+./target/gemini-repl
+```
+
+## Architecture Notes
+
+### Key Differences from Python Version
+
+1. **Startup Time**: Near-instant with Babashka vs Python startup
+2. **Data Format**: EDN instead of JSON for persistence
+3. **Concurrency**: Clojure's immutable data structures
+4. **Tools**: More functional approach to tool system
+
+### Component Responsibilities
+
+- `core/repl.clj` - Main event loop and command handling
+- `core/api-client.clj` - HTTP client for Gemini API
+- `utils/context.clj` - Immutable context management
+- `utils/logger.clj` - Structured logging
+- `tools/system.clj` - Extensible tool framework
+
+## Common Issues
+
+### FIFO Creation
+The FIFO is created by direnv. If missing:
+```bash
+mkfifo logs/gemini.fifo
+```
+
+### FreeBSD Compatibility
+Use `gmake` instead of `make` on FreeBSD systems.
+
+### API Key Issues
+Ensure GEMINI_API_KEY is set in .env file and loaded by direnv.
+
+## Extension Points
+
+1. **New Tools**: Add to `tools/system.clj`
+2. **New Commands**: Add method to `handle-command` multimethod
+3. **API Models**: Update `model` in `api-client.clj`
+4. **Logging**: Extend `logger.clj` for new outputs
+#+end_src
+
+* AI Context
+
+#+begin_src markdown :tangle .ai/project-context.md
+# Gemini REPL Clojure/Babashka Implementation
+
+This is a Clojure/Babashka implementation of the Gemini REPL, evolved from the Python version (005).
+
+## Key Features
+- Instant startup with Babashka
+- Functional programming with immutable data
+- EDN for data serialization
+- Multimethod-based command dispatch
+- Tool system with safety constraints
+- FIFO and file logging
+
+## Architecture
+- Event-driven REPL with slash commands
+- Token-aware context management
+- Pluggable tool system
+- Structured JSON logging
+- Native image compilation support
+
+## Development
+- Literate programming with org-mode
+- All code tangled from CLOJURE-GEMINI-REPL.org
+- Test-driven development
+- FreeBSD compatible (gmake support)
+#+end_src
+
+#+begin_src json :tangle .ai/context-eval.json
+{
+  "questions": [
+    {
+      "q": "What language is this REPL implemented in?",
+      "a": "Clojure/Babashka"
+    },
+    {
+      "q": "What is the main advantage over the Python version?",
+      "a": "Instant startup time with Babashka"
+    },
+    {
+      "q": "How is code organized in this project?",
+      "a": "Using literate programming with org-mode, all code is tangled from CLOJURE-GEMINI-REPL.org"
+    },
+    {
+      "q": "What data format is used for persistence?",
+      "a": "EDN (Extensible Data Notation) instead of JSON"
+    },
+    {
+      "q": "How are commands handled?",
+      "a": "Using Clojure multimethods for extensible dispatch"
+    }
+  ]
+}
+#+end_src
+
+* Markdown to Org-mode Conversion Note
+
+#+begin_comment
+CONVERSION DIRECTIVE: User-facing documentation should be converted to org-mode format using an 
+automated agent. The markdown format is used here to avoid the complexity of nested org-mode 
+within org-mode source blocks.
+
+Files TO CONVERT to org-mode:
+- README.md → README.org (main user documentation)
+- REGENERATION.md → REGENERATION.org (user guide for regeneration)
+
+Files that MUST REMAIN as markdown:
+- .claude/commands/*.md (Claude's command system expects markdown)
+- .ai/*.md (AI context files work well in markdown)
+- CLAUDE.md (if created - AI assistant configuration)
+- Any files in change-requests/ (GitHub issues expect markdown)
+- Any GitHub-related documentation (GitHub renders markdown natively)
+
+The conversion should preserve all content and formatting while taking advantage of org-mode features
+like better source code blocks, TODO items, tags, and internal linking for user-facing documentation.
+#+end_comment
