@@ -2,7 +2,7 @@
 #+AUTHOR: AYGP-DR
 #+DATE: 2025-07-18
 
-[[][file:https://img.shields.io/badge/FreeBSD-14.3--RELEASE-red?logo=freebsd]] [[][file:https://img.shields.io/badge/Clojure-1.12.0-blue?logo=clojure]] [[][file:https://img.shields.io/badge/Babashka-1.12.206-green?logo=clojure]] [[][file:https://img.shields.io/badge/Org--mode-9.0+-purple?logo=gnu-emacs]] [[https://opensource.org/licenses/MIT][file:https://img.shields.io/badge/License-MIT-yellow]] [[][file:https://img.shields.io/badge/Type-Educational-orange]]
+[["https://wal.sh"][file:https://img.shields.io/badge/FreeBSD-14.3--RELEASE-red?logo=freebsd]] [["https://wal.sh"][file:https://img.shields.io/badge/Clojure-1.12.0-blue?logo=clojure]] [["https://wal.sh"][file:https://img.shields.io/badge/Babashka-1.12.206-green?logo=clojure]] [["https://wal.sh"][file:https://img.shields.io/badge/Org--mode-9.0+-purple?logo=gnu-emacs]] [[https://opensource.org/licenses/MIT][file:https://img.shields.io/badge/License-MIT-yellow]] [["https://wal.sh"][file:https://img.shields.io/badge/Type-Educational-orange]]
 
 * Overview
 
