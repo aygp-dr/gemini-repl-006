@@ -170,3 +170,38 @@ If you're stuck:
 4. Remember: the goal is to learn AI-assisted development, not just to get the code working
 
 Good luck with your literate programming journey! 🚀
+
+* Appendix: Docker Setup (Optional)
+
+If you prefer a containerized environment, here's a simple Dockerfile:
+
+#+begin_src dockerfile :tangle Dockerfile
+FROM ubuntu:22.04
+
+# Install basic dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install mise (formerly rtx)
+RUN curl https://mise.run | sh
+ENV PATH="/root/.local/share/mise/shims:/root/.local/bin:${PATH}"
+
+# Install tools via mise
+RUN mise use --global java@temurin-17
+RUN mise use --global babashka@latest
+
+# Verify installations
+RUN java --version && bb --version
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]
+#+end_src
+
+To use this:
+1. Tangle just this block: ~C-c C-v t~ on the code block in Emacs
+2. Or manually save the above to a file named ~Dockerfile~
+3. Build: ~docker build -t gemini-repl .~
+4. Run: ~docker run -it -v $(pwd):/workspace gemini-repl~
