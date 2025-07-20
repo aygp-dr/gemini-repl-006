@@ -1,0 +1,24 @@
+{
+  "questions": [
+    {
+      "q": "What language is this REPL implemented in?",
+      "a": "Clojure/Babashka"
+    },
+    {
+      "q": "What is the main advantage over the Python version?",
+      "a": "Instant startup time with Babashka"
+    },
+    {
+      "q": "How is code organized in this project?",
+      "a": "Using literate programming with org-mode, all code is tangled from CLOJURE-GEMINI-REPL.org"
+    },
+    {
+      "q": "What data format is used for persistence?",
+      "a": "EDN (Extensible Data Notation) instead of JSON"
+    },
+    {
+      "q": "How are commands handled?",
+      "a": "Using Clojure multimethods for extensible dispatch"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+# Linguist overrides
+*.org linguist-documentation=false
+*.org linguist-detectable=true
+
+# Line endings
+*.sh text eol=lf
+*.clj text eol=lf
+*.edn text eol=lf
+bb.edn text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary

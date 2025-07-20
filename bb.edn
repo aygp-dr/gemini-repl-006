@@ -1,0 +1,30 @@
+{:paths ["src" "resources"]
+ :deps {org.babashka/http-client {:mvn/version "0.4.21"}
+        com.cognitect/transit-clj {:mvn/version "1.0.333"}}
+ :tasks
+ {:override-builtin true
+  repl {:doc "Start REPL"
+        :task (shell "bb repl")}
+  
+  test {:doc "Run tests"
+        :task (shell "bb test/runner.clj")}
+  
+  lint {:doc "Run linter"
+        :task (shell "clj-kondo --lint src test")}
+  
+  format {:doc "Format code"
+        :task (shell "cljfmt fix src test")}
+  
+  run {:doc "Run the REPL"
+       :requires ([gemini-repl.main])
+       :task (gemini-repl.main/-main)}
+  
+  build {:doc "Build native image (requires GraalVM)"
+         :task (shell "scripts/build-native.sh")}
+  
+  dev {:doc "Start development mode"
+       :task (do (shell "bb repl"))}
+  
+  clean {:doc "Clean build artifacts"
+         :task (do (shell "rm -rf target out .cpcache")
+                   (println "Cleaned build artifacts"))}}}

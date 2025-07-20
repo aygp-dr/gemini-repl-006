@@ -1,2 +1,39 @@
-# Ignore Babashka JAR files
-*.jar
+# Environment
+.env
+.envrc.local
+
+# Clojure
+.cpcache/
+.nrepl-port
+.lsp/
+.clj-kondo/.cache/
+
+# Build artifacts
+target/
+out/
+
+# Logs
+logs/*.log
+logs/*.fifo
+*.log
+
+# Workspace
+workspace/*
+!workspace/.gitkeep
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Test coverage
+coverage/

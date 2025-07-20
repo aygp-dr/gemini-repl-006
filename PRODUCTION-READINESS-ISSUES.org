@@ -1,0 +1,291 @@
+#+TITLE: GitHub Issues for gemini-repl-006
+#+AUTHOR: jwalsh
+#+DATE: 2025-07-19
+#+STARTUP: overview
+
+* Production Deployment Patterns for Gemini REPL
+:PROPERTIES:
+:header-args: :tangle ./issues/production-deployment.md :mkdirp t
+:END:
+
+#+BEGIN_SRC markdown
+---
+title: Implement Production Deployment Patterns for Gemini REPL
+labels: enhancement, infrastructure, security
+milestone: v1.0-production
+---
+
+## Overview
+
+The Gemini REPL requires production-ready deployment patterns to ensure safe operation in multi-user environments. As a TUI-based REPL with potential for self-modification capabilities, we need robust isolation and deployment strategies.
+
+## Requirements
+
+### 1. Container-Based Isolation
+- [ ] Create Dockerfile with minimal attack surface
+- [ ] Implement user namespace isolation
+- [ ] Configure resource limits (CPU, memory, file descriptors)
+- [ ] Disable network access except for Gemini API calls
+- [ ] Mount filesystem as read-only where possible
+
+### 2. Deployment Architecture
+- [ ] Design multi-tier deployment (dev/staging/prod)
+- [ ] Implement blue-green deployment strategy
+- [ ] Create health check endpoints for container orchestration
+- [ ] Document rollback procedures
+
+### 3. Environment Configuration
+- [ ] Externalize all configuration via environment variables
+- [ ] Implement secrets management for API keys
+- [ ] Create .env.example with all required variables
+- [ ] Document production environment requirements
+
+### 4. Monitoring & Observability
+- [ ] Add structured logging (JSON format)
+- [ ] Implement metrics collection (Prometheus format)
+- [ ] Create alerts for anomalous behavior
+- [ ] Track API usage and rate limits
+
+## Acceptance Criteria
+- REPL runs in isolated container with limited privileges
+- Zero-downtime deployments are possible
+- All secrets are externalized and encrypted at rest
+- Monitoring dashboards show system health
+
+## Security Considerations
+- Container escape prevention
+- API key rotation strategy
+- Audit logging for all REPL commands
+- Network egress restrictions
+
+## References
+- OWASP Container Security Top 10
+- CIS Docker Benchmark
+- NIST Container Security Guide
+#+END_SRC
+
+* Security Scanning Workflows
+:PROPERTIES:
+:header-args: :tangle ./issues/security-scanning.md :mkdirp t
+:END:
+
+#+BEGIN_SRC markdown
+---
+title: Implement Comprehensive Security Scanning for TUI REPL
+labels: security, ci/cd, high-priority
+milestone: v0.9-security
+assignees: 
+---
+
+## Overview
+
+A TUI REPL that can execute code and potentially self-modify presents unique security challenges. We need automated security scanning at multiple levels to prevent command injection, privilege escalation, and data exfiltration.
+
+## Requirements
+
+### 1. Static Application Security Testing (SAST)
+- [ ] Integrate semgrep for ClojureScript code analysis
+- [ ] Configure custom rules for REPL-specific vulnerabilities
+- [ ] Scan for command injection patterns
+- [ ] Check for unsafe evaluation of user input
+
+### 2. Dependency Scanning
+- [ ] Implement npm audit in CI pipeline
+- [ ] Add OWASP dependency check for JVM dependencies
+- [ ] Configure Dependabot for automated updates
+- [ ] Create policy for handling critical vulnerabilities
+
+### 3. Container Scanning
+- [ ] Integrate Trivy for container image scanning
+- [ ] Scan base images before build
+- [ ] Implement policy enforcement (fail on HIGH/CRITICAL)
+- [ ] Regular scanning of deployed images
+
+### 4. Runtime Security
+- [ ] Implement input sanitization for REPL commands
+- [ ] Add rate limiting for API calls
+- [ ] Create allowlist for safe Clojure functions
+- [ ] Implement sandboxing for code execution
+
+### 5. Security Testing
+- [ ] Create security-focused test suite
+- [ ] Test for injection vulnerabilities
+- [ ] Verify sandbox escape prevention
+- [ ] Automate penetration testing scenarios
+
+## Implementation Plan
+
+```yaml
+# .github/workflows/security.yml
+name: Security Scanning
+on: [push, pull_request]
+
+jobs:
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+      
+  dependency-check:
+    # npm audit, OWASP checks
+    
+  container-scan:
+    # Trivy scanning
+```
+
+## Success Metrics
+- Zero HIGH/CRITICAL vulnerabilities in production
+- < 5 minute feedback loop for security issues
+- 100% of dependencies scanned
+- Security tests pass on every commit
+
+## Special Considerations for REPL
+- Prevent execution of system commands
+- Sanitize ANSI escape sequences
+- Validate all Gemini API responses
+- Implement command history encryption
+#+END_SRC
+
+* Structured CI/CD Pipelines
+:PROPERTIES:
+:header-args: :tangle ./issues/cicd-pipelines.md :mkdirp t
+:END:
+
+#+BEGIN_SRC markdown
+---
+title: Build Structured CI/CD Pipeline for Gemini REPL Development
+labels: infrastructure, automation, devops
+milestone: v0.8-automation
+---
+
+## Overview
+
+Establish a comprehensive CI/CD pipeline that supports the unique requirements of a self-aware REPL system, including automated testing of meta-programming capabilities and safe deployment of self-modifying code.
+
+## Requirements
+
+### 1. Build Pipeline
+- [ ] Multi-stage build process (dev/test/prod artifacts)
+- [ ] Cache management for ClojureScript dependencies
+- [ ] Artifact signing and verification
+- [ ] Build reproducibility guarantees
+
+### 2. Test Automation
+- [ ] Unit tests for core REPL functionality
+- [ ] Integration tests with Gemini API mocks
+- [ ] TUI interaction tests (using expect/tmux)
+- [ ] Self-modification safety tests
+- [ ] Performance benchmarks
+
+### 3. Quality Gates
+- [ ] Code coverage threshold (>80%)
+- [ ] Linting (clj-kondo) with zero warnings
+- [ ] Security scan must pass
+- [ ] Performance regression detection
+- [ ] Documentation generation and validation
+
+### 4. Deployment Pipeline
+- [ ] Automated staging deployments on main branch
+- [ ] Manual approval gate for production
+- [ ] Canary deployment support
+- [ ] Automated rollback on health check failure
+- [ ] Post-deployment verification tests
+
+### 5. Observer Integration
+- [ ] Automated observer report generation
+- [ ] Claude Code analysis integration
+- [ ] Metrics collection for AI-assisted development patterns
+- [ ] Feedback loop for pipeline optimization
+
+## Pipeline Architecture
+
+```mermaid
+graph LR
+    A[Commit] --> B[Build]
+    B --> C[Test]
+    C --> D{Quality Gates}
+    D -->|Pass| E[Security Scan]
+    D -->|Fail| F[Notify]
+    E --> G[Deploy Staging]
+    G --> H[Integration Tests]
+    H --> I{Manual Approval}
+    I -->|Approved| J[Deploy Prod]
+    I -->|Rejected| F
+    J --> K[Smoke Tests]
+    K --> L[Observer Analysis]
+```
+
+## Implementation Details
+
+### GitHub Actions Workflow Structure
+```
+.github/workflows/
+├── ci.yml          # Main CI pipeline
+├── security.yml    # Security scanning
+├── deploy.yml      # Deployment pipeline
+├── observer.yml    # Observer integration
+└── nightly.yml     # Nightly builds/tests
+```
+
+### Key Features
+- Matrix builds for multiple Clojure/Node versions
+- Parallel test execution
+- Artifact caching strategy
+- Secrets rotation automation
+- Deployment environment protection rules
+
+## Success Criteria
+- < 10 minute build + test cycle
+- Zero manual deployment steps
+- 100% automated rollback capability
+- Full audit trail for all deployments
+- Observer reports on every deployment
+
+## Special Considerations
+- Handle REPL's potential to modify its own CI/CD pipeline
+- Ensure observer agents can analyze pipeline performance
+- Create feedback mechanism for AI-suggested improvements
+- Implement safeguards against recursive CI triggers
+#+END_SRC
+
+* Conversion Script
+:PROPERTIES:
+:header-args: :tangle ./convert-to-issues.sh :mkdirp t :shebang #!/bin/bash
+:END:
+
+#+BEGIN_SRC bash
+# Convert tangled markdown files to GitHub issues
+# Usage: ./convert-to-issues.sh
+
+REPO="aygp-dr/gemini-repl-006"
+
+echo "Creating GitHub issues for $REPO..."
+
+# Create production deployment issue
+gh issue create \
+  --repo "$REPO" \
+  --title "Implement Production Deployment Patterns for Gemini REPL" \
+  --body-file "./issues/production-deployment.md" \
+  --label "enhancement,infrastructure,security" \
+  --milestone "v1.0-production"
+
+# Create security scanning issue  
+gh issue create \
+  --repo "$REPO" \
+  --title "Implement Comprehensive Security Scanning for TUI REPL" \
+  --body-file "./issues/security-scanning.md" \
+  --label "security,ci/cd,high-priority" \
+  --milestone "v0.9-security"
+
+# Create CI/CD pipeline issue
+gh issue create \
+  --repo "$REPO" \
+  --title "Build Structured CI/CD Pipeline for Gemini REPL Development" \
+  --body-file "./issues/cicd-pipelines.md" \
+  --label "infrastructure,automation,devops" \
+  --milestone "v0.8-automation"
+
+echo "Issues created! Check https://github.com/$REPO/issues"
+#+END_SRC
