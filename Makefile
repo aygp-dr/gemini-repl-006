@@ -34,6 +34,12 @@ test:
 	@echo "Running tests..."
 	@bb test
 
+# Quick REPL test
+.PHONY: test-repl
+test-repl:
+	@echo "Testing REPL functionality..."
+	@bash scripts/test-repl.sh
+
 # Build native image
 .PHONY: build
 build:
@@ -45,6 +51,13 @@ build:
 run:
 	@echo "Starting Gemini REPL..."
 	@bb run
+
+# Run REPL in tmux with timeout
+.PHONY: tmux-repl
+tmux-repl:
+	@echo "Starting REPL in tmux session 'gemini-repl'..."
+	@tmux new-session -d -s gemini-repl "timeout 30m bb run" || tmux attach -t gemini-repl
+	@echo "Attach with: tmux attach -t gemini-repl"
 
 # Development mode
 .PHONY: dev
