@@ -1,7 +1,7 @@
 (ns gemini-repl.core.api-client
   "Gemini API client implementation"
   (:require [babashka.http-client :as http]
-            [cheshire.core :as json]
+            [babashka.json :as json]
             [clojure.string :as str]))
 
 (def ^:private api-key (System/getenv "GEMINI_API_KEY"))
@@ -20,7 +20,7 @@
 (defn- parse-response
   "Parse Gemini API response"
   [response]
-  (let [body (json/parse-string (:body response) true)
+  (let [body (json/parse-string (:body response) {:key-fn keyword})
         candidate (first (:candidates body))
         content (get-in candidate [:content :parts])
         text-parts (filter #(contains? % :text) content)
@@ -44,7 +44,7 @@
         body (make-request-body messages tools)
         response (http/post url
                             {:headers {"Content-Type" "application/json"}
-                             :body (json/generate-string body)})]
+                             :body (json/write-str body)})]
     (if (= 200 (:status response))
       (parse-response response)
       (throw (ex-info "API request failed" 

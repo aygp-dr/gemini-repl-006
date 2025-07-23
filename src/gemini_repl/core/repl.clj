@@ -22,8 +22,7 @@
 (defn- get-prompt
   "Generate the prompt string"
   []
-  (let [tokens (ctx/get-token-count)]
-    (str "\n[" tokens " tokens] > ")))
+  "> ")
 
 (defn- display-response
   "Display response with metadata"
