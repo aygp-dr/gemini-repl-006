@@ -1,2 +1,53 @@
-# Ignore Babashka JAR files
+# Environment
+.env
+.env.*
+!.env.example
+!.env.debug
+.envrc.local
+
+# Editor temp files
+*~
+*.swp
+*.swo
+*.bak
+\#*\#
+.\#*
+
+# Clojure
+.cpcache/
+.nrepl-port
+.lsp/
+.clj-kondo/.cache/
+
+# Build artifacts
+target/
+out/
+
+# Ignore Babashka JAR files (except the one we track)
 *.jar
+!babashka-1.12.206-standalone.jar
+
+# Logs
+logs/*.log
+logs/*.fifo
+*.log
+
+# Workspace
+workspace/*
+!workspace/.gitkeep
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Test coverage
+coverage/
