@@ -1,0 +1,319 @@
+#+TITLE: Gemini REPL 006 - System Requirements Specification
+#+AUTHOR: AYGP-DR Team
+#+DATE: 2025-07-23
+#+OPTIONS: toc:3 num:t
+
+* Overview
+
+This document defines the comprehensive requirements for the gemini-repl-006 system, a Babashka-powered REPL with AI integration. It serves as the authoritative specification for developers, testers, and students working with the system.
+
+* Core System Requirements
+
+** API Client Specifications
+
+*** Gemini API Integration
+- MUST support Gemini API v1beta endpoints
+- MUST handle both streaming and batch response modes
+- MUST implement proper error boundaries and retry logic
+- MUST track token usage and cost estimation
+- SHOULD support model switching via configuration
+
+*** Request/Response Handling
+#+begin_src clojure
+;; Expected API contract
+{:endpoint "https://generativelanguage.googleapis.com/v1beta"
+ :model "gemini-2.0-flash-exp"  ; configurable
+ :auth {:api-key (System/getenv "GEMINI_API_KEY")}
+ :timeout 30000  ; 30 seconds
+ :retry {:max-attempts 3
+         :backoff-ms [1000 2000 4000]}}
+#+end_src
+
+** Context Management
+
+*** Conversation History
+- MUST persist conversations in EDN format
+- MUST support session resume functionality
+- MUST implement token window management with pruning
+- MUST track message roles (user/assistant/system)
+- SHOULD maintain metadata (timestamps, tokens, costs)
+
+*** Token Management Strategy
+#+begin_example
+Maximum Context: 32,768 tokens (configurable)
+Pruning Strategy: Remove oldest messages when 90% full
+Reserved Tokens: 2,048 for system prompts
+#+end_example
+
+** CLI Interface Specifications
+
+*** Command Line Arguments
+#+begin_src bash
+# Required interface
+gemini-repl [OPTIONS] [PROMPT]
+
+OPTIONS:
+  -h, --help         Show help information
+  -v, --version      Show version information
+  -p, --print        Print mode (non-interactive)
+  -n, --name NAME    Named session for persistence
+  -c, --config FILE  Configuration file path
+  -m, --model MODEL  Override default model
+  --debug            Enable debug logging
+#+end_src
+
+*** Exit Codes
+- 0: Success
+- 1: General error
+- 2: Configuration error
+- 3: API error
+- 4: File I/O error
+
+** Interactive REPL Features
+
+*** Core Commands
+#+begin_example
+/help         - Display available commands
+/exit, /quit  - Exit the REPL
+/clear        - Clear screen
+/context      - Show conversation context
+/stats        - Display usage statistics
+/save [file]  - Save conversation
+/load [file]  - Load conversation
+/tools        - List available tools
+/workspace    - Show workspace contents
+/debug        - Toggle debug mode
+/prompt       - Configure prompt style
+/version      - Show version information
+#+end_example
+
+*** Prompt Styles
+- minimal: ">"
+- tokens: "[N tokens] >"
+- lisp: "gemini>"
+- python: ">>>"
+- shell: "$ "
+- time: "[HH:MM] >"
+- model: "gemini-2.0-flash-exp>"
+- contextual: "model[messages]>"
+
+** Tool Calling Architecture
+
+*** Function Definitions
+#+begin_src clojure
+{:name "read_file"
+ :description "Read contents of a file"
+ :parameters {:type "object"
+              :properties {:path {:type "string"
+                                 :description "File path relative to workspace"}}
+              :required ["path"]}}
+#+end_src
+
+*** Security Constraints
+- MUST sandbox all file operations to workspace directory
+- MUST validate and sanitize all tool inputs
+- MUST log all tool executions
+- MUST implement rate limiting
+- SHOULD support tool permission configuration
+
+*** Available Tools (v0.1.0)
+1. read_file - Read file contents
+2. write_file - Write file contents
+3. list_files - List directory contents
+4. execute_code - Run code snippets (sandboxed)
+
+** Logging Specifications
+
+*** Log Format
+#+begin_src json
+{
+  "timestamp": "2025-07-23T12:34:56.789Z",
+  "level": "info|warn|error|debug",
+  "event": "event-name",
+  "data": {...},
+  "error": "error message if applicable"
+}
+#+end_src
+
+*** Log Levels
+- ERROR: System errors, API failures
+- WARN: Degraded functionality, retries
+- INFO: Normal operations, tool usage
+- DEBUG: Detailed tracing, API payloads
+
+*** Log Files
+- logs/gemini.log - Main application log
+- logs/gemini.fifo - Named pipe for real-time monitoring
+- logs/gemini-debug.log - Debug-level logging (when enabled)
+
+** Performance Requirements
+
+*** Response Times
+- REPL startup: < 500ms
+- Command execution: < 100ms (excluding API calls)
+- File operations: < 50ms
+- Context loading: < 200ms
+
+*** Resource Usage
+- Memory: < 256MB baseline
+- CPU: < 5% idle
+- Disk: < 10MB per session (excluding workspace)
+
+** Testing Requirements
+
+*** Unit Test Coverage
+- Minimum 80% code coverage
+- Critical paths must have 100% coverage
+- All public APIs must be tested
+
+*** Integration Tests
+- CLI argument combinations
+- API error scenarios
+- Tool execution paths
+- Session persistence
+
+*** Test Organization
+#+begin_example
+test/
+├── gemini_repl/
+│   ├── core/         # Core functionality tests
+│   ├── tools/        # Tool implementation tests
+│   └── utils/        # Utility function tests
+└── integration/      # End-to-end tests
+#+end_example
+
+** Build and Deployment
+
+*** Supported Platforms
+- Linux (x64, arm64)
+- macOS (x64, arm64)
+- FreeBSD (via Babashka, not native-image)
+- Windows (experimental)
+
+*** Distribution Formats
+1. Babashka script (primary)
+2. Standalone JAR with embedded Babashka
+3. Native image (platform-specific)
+4. Docker container
+
+*** Version Scheme
+#+begin_example
+MAJOR.MINOR.PATCH[-PRERELEASE]
+Example: 0.1.0-pre, 0.1.0, 1.0.0-rc1
+#+end_example
+
+** Security Requirements
+
+*** Authentication
+- API key management via environment variables
+- No hardcoded credentials
+- Support for key rotation
+
+*** Data Protection
+- Conversations stored locally only
+- No telemetry without explicit consent
+- Workspace isolation per session
+
+*** Input Validation
+- Sanitize all user inputs
+- Validate tool parameters
+- Prevent injection attacks
+- Rate limit API calls
+
+** Documentation Requirements
+
+*** User Documentation
+- README.md with quick start guide
+- Man page for CLI usage
+- Interactive help system
+- Example workflows
+
+*** Developer Documentation
+- Architecture diagrams
+- API documentation
+- Contributing guidelines
+- Test writing guide
+
+*** Experiment Tracking
+#+begin_example
+experiments/
+├── NNN-feature-name/
+│   ├── experiment-plan.md
+│   ├── implementation/
+│   ├── test-results.md
+│   └── conclusions.md
+#+end_example
+
+* Non-Functional Requirements
+
+** Accessibility
+- Support for screen readers
+- Keyboard-only navigation
+- High contrast mode support
+- Configurable output formatting
+
+** Internationalization
+- UTF-8 support throughout
+- Configurable date/time formats
+- Extensible message catalogs
+
+** Extensibility
+- Plugin architecture for tools
+- Custom prompt providers
+- Alternative AI backends
+- Middleware pipeline
+
+* Acceptance Criteria
+
+** v0.1.0 Release
+- [ ] Basic REPL functionality working
+- [ ] API integration complete
+- [ ] CLI arguments processed correctly
+- [ ] Logging infrastructure operational
+- [ ] Core commands implemented
+- [ ] Basic test suite passing
+
+** v1.0.0 Release
+- [ ] All tool functions implemented
+- [ ] Session persistence working
+- [ ] Performance targets met
+- [ ] Security review completed
+- [ ] Documentation complete
+- [ ] Cross-platform builds available
+
+* Appendices
+
+** A. Error Code Reference
+| Code | Description |
+|------+-------------|
+| E001 | API key missing |
+| E002 | Network timeout |
+| E003 | Invalid response format |
+| E004 | Context overflow |
+| E005 | Tool execution failed |
+| E006 | Permission denied |
+| E007 | Resource not found |
+
+** B. Configuration Schema
+#+begin_src clojure
+{:api {:key env/GEMINI_API_KEY
+       :model "gemini-2.0-flash-exp"
+       :timeout 30000}
+ :context {:max-tokens 32768
+           :prune-threshold 0.9}
+ :logging {:level :info
+           :file "logs/gemini.log"
+           :format :json}
+ :workspace {:path "./workspace"
+             :max-size-mb 100}}
+#+end_src
+
+** C. Telemetry Events (Future)
+- session-start
+- command-executed
+- tool-invoked
+- error-occurred
+- session-end
+
+#+STARTUP: overview
+#+STARTUP: hidestars
