@@ -51,3 +51,8 @@ node_modules/
 
 # Test coverage
 coverage/
+
+# Core dumps
+*.core
+core
+core.*

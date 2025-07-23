@@ -7,6 +7,18 @@
 
 This document defines the comprehensive requirements for the gemini-repl-006 system, a Babashka-powered REPL with AI integration. It serves as the authoritative specification for developers, testers, and students working with the system.
 
+** Document Purpose
+
+This specification guides implementation from scratch while incorporating lessons learned from previous versions (especially gemini-repl-005) and extensive testing. It balances immediate implementation needs with architectural decisions that enable future evolution.
+
+** Key Design Principles
+
+1. *Start Simple, Design for Growth* - Core features first, but with extension points
+2. *Security by Default* - Sandbox everything from the beginning
+3. *Observable System* - Comprehensive logging and metrics from day one
+4. *Test-Driven* - Write tests before features
+5. *Documentation as Code* - Keep docs in sync with implementation
+
 * Core System Requirements
 
 ** API Client Specifications
@@ -17,6 +29,7 @@ This document defines the comprehensive requirements for the gemini-repl-006 sys
 - MUST implement proper error boundaries and retry logic
 - MUST track token usage and cost estimation
 - SHOULD support model switching via configuration
+- FUTURE: Abstract API layer for multiple providers
 
 *** Request/Response Handling
 #+begin_src clojure
@@ -29,6 +42,12 @@ This document defines the comprehensive requirements for the gemini-repl-006 sys
          :backoff-ms [1000 2000 4000]}}
 #+end_src
 
+*** Implementation Considerations
+- Use protocols/multimethods for provider abstraction from the start
+- Implement response streaming foundations even if not immediately used
+- Design message format to be provider-agnostic
+- Consider rate limiting and quota tracking early
+
 ** Context Management
 
 *** Conversation History
@@ -37,13 +56,21 @@ This document defines the comprehensive requirements for the gemini-repl-006 sys
 - MUST implement token window management with pruning
 - MUST track message roles (user/assistant/system)
 - SHOULD maintain metadata (timestamps, tokens, costs)
+- FUTURE: Support for conversation branching/forking
 
 *** Token Management Strategy
 #+begin_example
 Maximum Context: 32,768 tokens (configurable)
 Pruning Strategy: Remove oldest messages when 90% full
 Reserved Tokens: 2,048 for system prompts
+Future: Implement summarization for pruned content
 #+end_example
+
+*** Lessons from Testing
+- Token counting must be accurate - consider using tiktoken or similar
+- Implement context compression early to avoid later refactoring
+- Design for multi-conversation support from the beginning
+- Consider implementing a context cache for performance
 
 ** CLI Interface Specifications
 
@@ -60,6 +87,12 @@ OPTIONS:
   -c, --config FILE  Configuration file path
   -m, --model MODEL  Override default model
   --debug            Enable debug logging
+
+# Future additions (design for these now):
+  --stream           Enable streaming responses
+  --tools PATTERN    Enable specific tools by pattern
+  --timeout SECONDS  Override API timeout
+  --export FORMAT    Export conversation (json, md, org)
 #+end_src
 
 *** Exit Codes
@@ -68,6 +101,8 @@ OPTIONS:
 - 2: Configuration error
 - 3: API error
 - 4: File I/O error
+- 5: Tool execution error (future)
+- 6: Security violation (future)
 
 ** Interactive REPL Features
 
@@ -85,6 +120,13 @@ OPTIONS:
 /debug        - Toggle debug mode
 /prompt       - Configure prompt style
 /version      - Show version information
+
+# Future commands to consider:
+/undo         - Undo last interaction
+/branch       - Create conversation branch
+/share        - Generate shareable link
+/export       - Export in various formats
+/plugin       - Manage plugins
 #+end_example
 
 *** Prompt Styles
@@ -97,6 +139,9 @@ OPTIONS:
 - model: "gemini-2.0-flash-exp>"
 - contextual: "model[messages]>"
 
+*** Implementation Note
+Design the prompt system with a provider pattern to allow custom prompts via plugins later.
+
 ** Tool Calling Architecture
 
 *** Function Definitions
@@ -106,7 +151,11 @@ OPTIONS:
  :parameters {:type "object"
               :properties {:path {:type "string"
                                  :description "File path relative to workspace"}}
-              :required ["path"]}}
+              :required ["path"]}
+ ;; Future-proofing fields:
+ :version "1.0.0"
+ :capabilities [:text :binary]
+ :rate-limit {:requests-per-minute 60}}
 #+end_src
 
 *** Security Constraints
@@ -115,12 +164,28 @@ OPTIONS:
 - MUST log all tool executions
 - MUST implement rate limiting
 - SHOULD support tool permission configuration
+- FUTURE: Tool usage policies and audit trails
 
 *** Available Tools (v0.1.0)
 1. read_file - Read file contents
 2. write_file - Write file contents
 3. list_files - List directory contents
 4. execute_code - Run code snippets (sandboxed)
+
+*** Future Tools (design interfaces now)
+5. web_search - Search the internet
+6. web_fetch - Fetch web page content
+7. image_analyze - Analyze image content
+8. data_query - Query structured data
+9. git_operations - Version control operations
+10. terminal_emulator - Full terminal access (heavily sandboxed)
+
+*** Tool System Design Principles
+- Each tool is a separate namespace with standard interface
+- Tools declare their own security requirements
+- Tools can depend on other tools (dependency graph)
+- Tools support dry-run mode for testing
+- Tools emit structured events for observability
 
 ** Logging Specifications
 
@@ -131,7 +196,9 @@ OPTIONS:
   "level": "info|warn|error|debug",
   "event": "event-name",
   "data": {...},
-  "error": "error message if applicable"
+  "error": "error message if applicable",
+  "trace_id": "uuid-for-request-tracing",
+  "span_id": "uuid-for-operation-tracing"
 }
 #+end_src
 
@@ -140,11 +207,20 @@ OPTIONS:
 - WARN: Degraded functionality, retries
 - INFO: Normal operations, tool usage
 - DEBUG: Detailed tracing, API payloads
+- TRACE: Ultra-detailed debugging (future)
 
 *** Log Files
 - logs/gemini.log - Main application log
 - logs/gemini.fifo - Named pipe for real-time monitoring
 - logs/gemini-debug.log - Debug-level logging (when enabled)
+- logs/tools/ - Per-tool execution logs (future)
+- logs/sessions/ - Per-session logs (future)
+
+*** Observability Considerations
+- Implement OpenTelemetry spans from the start
+- Design for log aggregation services
+- Include correlation IDs across all operations
+- Consider metrics collection (Prometheus format)
 
 ** Performance Requirements
 
@@ -153,11 +229,20 @@ OPTIONS:
 - Command execution: < 100ms (excluding API calls)
 - File operations: < 50ms
 - Context loading: < 200ms
+- Tool execution: < 1s (excluding external calls)
 
 *** Resource Usage
 - Memory: < 256MB baseline
 - CPU: < 5% idle
 - Disk: < 10MB per session (excluding workspace)
+- Network: Respect rate limits, implement backoff
+
+*** Performance Optimization Strategies
+- Lazy load tools and features
+- Implement caching for repeated operations
+- Use streaming for large file operations
+- Consider native compilation for hot paths
+- Profile early and often
 
 ** Testing Requirements
 
@@ -165,12 +250,15 @@ OPTIONS:
 - Minimum 80% code coverage
 - Critical paths must have 100% coverage
 - All public APIs must be tested
+- Security boundaries must have property-based tests
 
 *** Integration Tests
 - CLI argument combinations
 - API error scenarios
 - Tool execution paths
 - Session persistence
+- Multi-turn conversations
+- Streaming responses (when implemented)
 
 *** Test Organization
 #+begin_example
@@ -179,8 +267,18 @@ test/
 │   ├── core/         # Core functionality tests
 │   ├── tools/        # Tool implementation tests
 │   └── utils/        # Utility function tests
-└── integration/      # End-to-end tests
+├── integration/      # End-to-end tests
+├── performance/      # Performance benchmarks
+├── security/         # Security-specific tests
+└── fixtures/         # Test data and mocks
 #+end_example
+
+*** Testing Best Practices
+- Use property-based testing for security boundaries
+- Implement contract tests for API interactions
+- Create chaos tests for error conditions
+- Maintain golden files for regression testing
+- Use testcontainers for integration tests
 
 ** Build and Deployment
 
@@ -189,18 +287,28 @@ test/
 - macOS (x64, arm64)
 - FreeBSD (via Babashka, not native-image)
 - Windows (experimental)
+- Docker (all platforms)
 
 *** Distribution Formats
 1. Babashka script (primary)
 2. Standalone JAR with embedded Babashka
 3. Native image (platform-specific)
 4. Docker container
+5. Homebrew formula (future)
+6. Nix package (future)
 
 *** Version Scheme
 #+begin_example
-MAJOR.MINOR.PATCH[-PRERELEASE]
-Example: 0.1.0-pre, 0.1.0, 1.0.0-rc1
+MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
+Example: 0.1.0-pre, 0.1.0, 1.0.0-rc1+20250723
 #+end_example
+
+*** CI/CD Considerations
+- Automated testing on all platforms
+- Security scanning in pipeline
+- Performance regression detection
+- Automatic changelog generation
+- Cross-platform binary signing
 
 ** Security Requirements
 
@@ -208,17 +316,28 @@ Example: 0.1.0-pre, 0.1.0, 1.0.0-rc1
 - API key management via environment variables
 - No hardcoded credentials
 - Support for key rotation
+- Future: OAuth2 support for web UI
+- Future: Multi-tenant API key management
 
 *** Data Protection
 - Conversations stored locally only
 - No telemetry without explicit consent
 - Workspace isolation per session
+- Encryption at rest for sensitive data (future)
+- Secure credential storage (keyring integration)
 
 *** Input Validation
 - Sanitize all user inputs
 - Validate tool parameters
 - Prevent injection attacks
 - Rate limit API calls
+- Implement security headers for future web UI
+
+*** Security Testing Requirements
+- Regular dependency scanning
+- Penetration testing for tool boundaries
+- Fuzzing for input handlers
+- Security review checklist for PRs
 
 ** Documentation Requirements
 
@@ -227,12 +346,14 @@ Example: 0.1.0-pre, 0.1.0, 1.0.0-rc1
 - Man page for CLI usage
 - Interactive help system
 - Example workflows
+- Video tutorials (future)
 
 *** Developer Documentation
 - Architecture diagrams
 - API documentation
 - Contributing guidelines
 - Test writing guide
+- Plugin development guide (future)
 
 *** Experiment Tracking
 #+begin_example
@@ -241,8 +362,147 @@ experiments/
 │   ├── experiment-plan.md
 │   ├── implementation/
 │   ├── test-results.md
-│   └── conclusions.md
+│   ├── conclusions.md
+│   └── adr/  # Architecture Decision Records
 #+end_example
+
+* Future Features Roadmap
+
+** Version 0.x (Foundation)
+- Core REPL functionality
+- Basic tool system
+- Session management
+- Comprehensive testing
+
+** Version 1.x (Production Ready)
+- Plugin architecture
+- Streaming responses
+- Advanced security features
+- Performance optimizations
+- Multi-model support
+
+** Version 2.x (Advanced Features)
+- Web UI with real-time collaboration
+- Mobile applications
+- Voice interface
+- Advanced data analysis tools
+- Workflow automation
+
+** Version 3.x (Platform Evolution)
+- Marketplace for tools/plugins
+- Enterprise features (SSO, audit)
+- Distributed execution
+- AI agent orchestration
+
+* Architectural Considerations
+
+** Design Patterns to Use
+1. **Protocol-Oriented Design** - Define protocols for all major components
+2. **Middleware Pipeline** - For request/response processing
+3. **Event Sourcing** - For conversation history
+4. **Command Pattern** - For tool execution
+5. **Strategy Pattern** - For model providers
+6. **Observer Pattern** - For real-time updates
+
+** Anti-Patterns to Avoid
+1. **God Objects** - Keep components focused
+2. **Circular Dependencies** - Use dependency injection
+3. **Premature Optimization** - Profile first
+4. **Tight Coupling** - Use abstractions
+5. **Global State** - Use proper state management
+
+** Key Decision Points
+1. **Async vs Sync** - Design for async from start
+2. **Monolith vs Modules** - Start monolithic, design modular
+3. **Configuration Format** - EDN with schema validation
+4. **Plugin Interface** - Protocol-based with versioning
+5. **State Management** - Immutable with controlled mutations
+
+* Lessons Learned from Previous Versions
+
+** From gemini-repl-005 (Python)
+1. **JSON Parsing Issues** - Implement robust error handling
+2. **Tool Calling Complexity** - Start with simple, evolve gradually
+3. **Context Management** - Token counting accuracy is critical
+4. **Testing Challenges** - Mock API responses comprehensively
+5. **Security Boundaries** - Sandbox from day one
+
+** From Earlier Versions
+1. **REPL State Machine** - Explicit states prevent bugs
+2. **Error Recovery** - Every operation needs fallback
+3. **Performance** - Startup time matters for CLI tools
+4. **Documentation** - Keep it close to code
+5. **User Experience** - Clear error messages are crucial
+
+** Common Pitfalls to Avoid
+1. **Underestimating API Complexity** - APIs change and fail
+2. **Ignoring Edge Cases** - Large files, slow networks
+3. **Poor Error Messages** - Users need actionable information
+4. **Inadequate Testing** - Integration tests catch real issues
+5. **Feature Creep** - Stay focused on core value
+
+* Implementation Guidance
+
+** Starting Points for New Implementers
+
+*** Week 1: Foundation
+1. Set up project structure with proper namespaces
+2. Implement basic REPL loop with state machine
+3. Add logging infrastructure
+4. Create initial test harness
+5. Implement core command parsing
+
+*** Week 2: API Integration
+1. Design provider abstraction
+2. Implement Gemini API client
+3. Add retry and error handling
+4. Create API response mocking
+5. Test various failure modes
+
+*** Week 3: Tool System
+1. Design tool protocol
+2. Implement file operations with sandbox
+3. Add security validation layer
+4. Create tool testing framework
+5. Document tool creation process
+
+*** Week 4: Polish and Deploy
+1. Implement session management
+2. Add CLI argument parsing
+3. Create packaging scripts
+4. Write user documentation
+5. Set up CI/CD pipeline
+
+** Code Organization Guidelines
+#+begin_example
+src/gemini_repl/
+├── core/
+│   ├── repl.clj         # Main REPL loop
+│   ├── api_client.clj   # API abstraction
+│   ├── context.clj      # Conversation management
+│   └── state.clj        # State machine
+├── providers/
+│   ├── gemini.clj       # Gemini implementation
+│   └── protocol.clj     # Provider protocol
+├── tools/
+│   ├── protocol.clj     # Tool protocol
+│   ├── file_ops.clj     # File operations
+│   ├── sandbox.clj      # Security layer
+│   └── registry.clj     # Tool management
+├── utils/
+│   ├── logging.clj      # Logging utilities
+│   ├── config.clj       # Configuration
+│   └── errors.clj       # Error handling
+└── main.clj             # Entry point
+#+end_example
+
+** Testing Strategy
+1. **Unit Tests** - Pure functions, isolated components
+2. **Integration Tests** - Component interactions
+3. **Contract Tests** - API compatibility
+4. **Property Tests** - Security boundaries
+5. **Performance Tests** - Benchmarks and profiles
+6. **Acceptance Tests** - User workflows
 
 * Non-Functional Requirements
 
@@ -251,69 +511,154 @@ experiments/
 - Keyboard-only navigation
 - High contrast mode support
 - Configurable output formatting
+- Future: Voice input/output
 
 ** Internationalization
 - UTF-8 support throughout
 - Configurable date/time formats
 - Extensible message catalogs
+- Right-to-left language support
+- Cultural considerations for prompts
 
 ** Extensibility
 - Plugin architecture for tools
 - Custom prompt providers
 - Alternative AI backends
 - Middleware pipeline
+- Event system for integrations
+
+** Maintainability
+- Clear module boundaries
+- Comprehensive documentation
+- Automated testing
+- Performance monitoring
+- Deprecation policies
 
 * Acceptance Criteria
 
-** v0.1.0 Release
+** v0.1.0 Release (MVP)
 - [ ] Basic REPL functionality working
 - [ ] API integration complete
 - [ ] CLI arguments processed correctly
 - [ ] Logging infrastructure operational
 - [ ] Core commands implemented
 - [ ] Basic test suite passing
+- [ ] Security sandbox functional
+- [ ] Documentation complete
 
-** v1.0.0 Release
-- [ ] All tool functions implemented
+** v0.5.0 Release (Beta)
+- [ ] All core tools implemented
 - [ ] Session persistence working
 - [ ] Performance targets met
+- [ ] Streaming support added
+- [ ] Plugin architecture designed
+- [ ] Cross-platform tested
+
+** v1.0.0 Release (Stable)
 - [ ] Security review completed
-- [ ] Documentation complete
-- [ ] Cross-platform builds available
+- [ ] Performance optimized
+- [ ] Plugin system operational
+- [ ] Multi-model support
+- [ ] Enterprise features ready
+- [ ] Production documentation
 
 * Appendices
 
 ** A. Error Code Reference
-| Code | Description |
-|------+-------------|
-| E001 | API key missing |
-| E002 | Network timeout |
-| E003 | Invalid response format |
-| E004 | Context overflow |
-| E005 | Tool execution failed |
-| E006 | Permission denied |
-| E007 | Resource not found |
+| Code | Description | User Action |
+|------+-------------+-------------|
+| E001 | API key missing | Set GEMINI_API_KEY environment variable |
+| E002 | Network timeout | Check internet connection, retry |
+| E003 | Invalid response format | Update to latest version |
+| E004 | Context overflow | Start new session or clear context |
+| E005 | Tool execution failed | Check tool permissions and inputs |
+| E006 | Permission denied | Verify file/directory permissions |
+| E007 | Resource not found | Ensure resource exists |
+| E008 | Rate limit exceeded | Wait before retrying |
+| E009 | Invalid configuration | Check config file syntax |
+| E010 | Unsupported operation | Feature not available |
 
 ** B. Configuration Schema
 #+begin_src clojure
 {:api {:key env/GEMINI_API_KEY
        :model "gemini-2.0-flash-exp"
-       :timeout 30000}
+       :timeout 30000
+       :retry {:max-attempts 3
+               :backoff-multiplier 2}
+       :rate-limit {:requests-per-minute 60}}
  :context {:max-tokens 32768
-           :prune-threshold 0.9}
+           :prune-threshold 0.9
+           :compression-enabled false}
  :logging {:level :info
            :file "logs/gemini.log"
-           :format :json}
+           :format :json
+           :max-size "10MB"
+           :max-files 5}
  :workspace {:path "./workspace"
-             :max-size-mb 100}}
+             :max-size-mb 100
+             :allowed-extensions [".txt" ".md" ".clj" ".edn"]}
+ :tools {:enabled ["read_file" "write_file" "list_files"]
+         :timeout 30000
+         :sandbox-level :strict}
+ :repl {:prompt-style :contextual
+        :history-size 1000
+        :auto-save true}
+ :security {:api-key-rotation-days 90
+            :audit-logging true
+            :encryption-at-rest false}}
 #+end_src
 
-** C. Telemetry Events (Future)
-- session-start
-- command-executed
-- tool-invoked
-- error-occurred
-- session-end
+** C. Tool Development Template
+#+begin_src clojure
+(ns gemini-repl.tools.example
+  (:require [gemini-repl.tools.protocol :as proto]
+            [gemini-repl.tools.sandbox :as sandbox]))
+
+(defrecord ExampleTool []
+  proto/Tool
+  (execute [this params]
+    (sandbox/with-sandbox
+      ;; Tool implementation
+      {:status :success
+       :result "Tool executed"}))
+  
+  (describe [this]
+    {:name "example_tool"
+     :description "Example tool implementation"
+     :parameters {:type "object"
+                  :properties {:param {:type "string"}}
+                  :required ["param"]}
+     :version "1.0.0"})
+  
+  (validate [this params]
+    ;; Parameter validation
+    (when-not (:param params)
+      {:error "Missing required parameter: param"})))
+
+(defn create []
+  (->ExampleTool))
+#+end_src
+
+** D. Performance Benchmarks
+| Operation | Target | Measured | Notes |
+|-----------+--------+----------+-------|
+| Startup | 500ms | TBD | Cold start |
+| API Call | 2s | TBD | Including network |
+| Tool Exec | 100ms | TBD | Local tools only |
+| Context Save | 50ms | TBD | 1MB context |
+| Log Write | 5ms | TBD | Single entry |
+
+** E. Security Checklist
+- [ ] All user inputs sanitized
+- [ ] File paths validated and sandboxed
+- [ ] API keys never logged
+- [ ] Rate limiting implemented
+- [ ] Command injection prevented
+- [ ] Path traversal blocked
+- [ ] Resource limits enforced
+- [ ] Error messages sanitized
+- [ ] Dependencies scanned
+- [ ] Security headers set (future web UI)
 
 #+STARTUP: overview
 #+STARTUP: hidestars
