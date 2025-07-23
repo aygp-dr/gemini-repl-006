@@ -22,12 +22,16 @@ Students who complete this exercise will learn:
 
 * What's in This Repository
 
-This repository contains exactly two files:
+This repository contains three key org-mode documents that work together:
 
-1. [[file:README.org][README.org]] (this file) - Instructions for students
-2. [[file:CLOJURE-GEMINI-REPL.org][CLOJURE-GEMINI-REPL.org]] - A complete literate programming specification
+1. [[file:README.org][README.org]] (this file) - Instructions for students and overview
+2. [[file:CLOJURE-GEMINI-REPL.org][CLOJURE-GEMINI-REPL.org]] - The complete literate programming specification
+3. [[file:REQUIREMENTS.org][REQUIREMENTS.org]] - Formal system requirements and acceptance criteria
 
-The [[file:CLOJURE-GEMINI-REPL.org][CLOJURE-GEMINI-REPL.org]] file contains:
+** Document Relationships
+
+*** [[file:CLOJURE-GEMINI-REPL.org][CLOJURE-GEMINI-REPL.org]] - The Implementation Guide
+The main literate programming document contains:
 - Detailed system architecture
 - All source code (embedded in org-mode blocks)
 - Configuration files
@@ -35,6 +39,23 @@ The [[file:CLOJURE-GEMINI-REPL.org][CLOJURE-GEMINI-REPL.org]] file contains:
 - Test suites
 - Documentation
 - AI assistant guidance
+- *Intentional inconsistencies* for educational purposes
+
+*** [[file:REQUIREMENTS.org][REQUIREMENTS.org]] - The Specification
+The formal requirements document defines:
+- Core system requirements and constraints
+- API specifications and contracts
+- Security and performance requirements
+- Testing and quality standards
+- Release criteria for v0.1.0 and v1.0.0
+- Non-functional requirements (accessibility, i18n, extensibility)
+
+*** How They Work Together
+1. Students start with the *literate specification* (CLOJURE-GEMINI-REPL.org)
+2. They extract and implement the code with AI assistance
+3. They validate their implementation against *REQUIREMENTS.org*
+4. The requirements serve as acceptance tests for the exercise
+5. Any gaps between implementation and requirements are learning opportunities
 
 * Getting Started
 
@@ -118,6 +139,20 @@ Your implementation will be evaluated on:
 3. *Problem Solving*: How did you handle issues and inconsistencies?
 4. *AI Collaboration*: How effectively did you work with your AI assistant?
 5. *Documentation*: Did you document your process and learnings?
+6. *Requirements Compliance*: Does your implementation meet the specifications in REQUIREMENTS.org?
+
+** Using REQUIREMENTS.org for Validation
+
+The [[file:REQUIREMENTS.org][REQUIREMENTS.org]] document provides acceptance criteria that your implementation should meet:
+
+- Check the *Core System Requirements* section for API and context specifications
+- Validate CLI behavior against *CLI Interface Specifications*
+- Ensure all *Core Commands* in the Interactive REPL section work
+- Verify *Security Constraints* are enforced (especially workspace sandboxing)
+- Run tests to meet *Testing Requirements* coverage targets
+- Compare performance against *Performance Requirements* benchmarks
+
+The requirements document includes specific test cases, error codes, and configuration schemas that your implementation should support.
 
 * Tips for Success
 
